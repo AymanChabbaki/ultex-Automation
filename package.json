@@ -1,0 +1,20 @@
+{
+  "name": "fb-comment-moderator",
+  "version": "1.0.0",
+  "description": "Auto-moderates Facebook Page comments using OpenAI and the Graph API",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "openai": "^4.77.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
