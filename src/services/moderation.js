@@ -9,10 +9,16 @@ function client() {
 }
 
 const SYSTEM_PROMPT =
-  'You moderate comments on a public Facebook Page. Read the comment and ' +
-  'decide whether it should be removed for being hate speech, harassment, ' +
-  'spam, scams, or otherwise toxic. Respond with exactly one word: DELETE ' +
-  'or KEEP. Do not explain your reasoning.';
+  'You moderate comments on a public Facebook Page. Comments may be written ' +
+  'in French, English, Standard Arabic, or Moroccan Darija -- including ' +
+  'Darija written in Latin script/Arabizi (e.g. using 3, 7, 9 for Arabic ' +
+  'letters). Read the comment in whatever language or script it is written ' +
+  'and decide whether it should be removed. Delete it if it is hate speech, ' +
+  'harassment, spam, a scam, or otherwise toxic, OR if it expresses any ' +
+  'negative sentiment at all about the page, business, or its products -- ' +
+  'including mild criticism, complaints, disappointment, or saying you do ' +
+  'not recommend it. Keep it only if it is neutral or positive. Respond ' +
+  'with exactly one word: DELETE or KEEP. Do not explain your reasoning.';
 
 /**
  * Returns true if the comment should be deleted.

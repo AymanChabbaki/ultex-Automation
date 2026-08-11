@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const { captureRawBody } = require('./middleware/verifySignature');
 const webhookRouter = require('./routes/webhook');
+const dashboardRouter = require('./routes/dashboard');
 
 // Only FB_VERIFY_TOKEN is needed to serve Meta's GET verify handshake,
 // so that's the only thing fatal at boot. The others are needed once
@@ -11,7 +12,13 @@ if (!process.env.FB_VERIFY_TOKEN) {
   console.error('Missing required environment variable: FB_VERIFY_TOKEN');
   process.exit(1);
 }
-const OPTIONAL_ENV = ['FB_APP_SECRET', 'PAGE_ACCESS_TOKEN', 'OPENAI_API_KEY'];
+const OPTIONAL_ENV = [
+  'FB_APP_SECRET',
+  'PAGE_ACCESS_TOKEN',
+  'OPENAI_API_KEY',
+  'DASHBOARD_USER',
+  'DASHBOARD_PASSWORD',
+];
 const missingOptional = OPTIONAL_ENV.filter((key) => !process.env[key]);
 if (missingOptional.length) {
   console.warn(
@@ -23,6 +30,7 @@ const app = express();
 app.use(express.json({ verify: captureRawBody }));
 
 app.use('/webhook', webhookRouter);
+app.use('/webhook', dashboardRouter);
 
 app.get('/health', (_req, res) => res.sendStatus(200));
 
