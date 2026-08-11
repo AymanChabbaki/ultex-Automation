@@ -1,6 +1,12 @@
 const OpenAI = require('openai');
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Built lazily (not at module load) so the server can still boot and
+// serve the Meta verify handshake before OPENAI_API_KEY is configured.
+let openai;
+function client() {
+  if (!openai) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return openai;
+}
 
 const SYSTEM_PROMPT =
   'You moderate comments on a public Facebook Page. Read the comment and ' +
@@ -14,7 +20,7 @@ const SYSTEM_PROMPT =
  * since the action here is destructive and irreversible.
  */
 async function shouldDelete(text) {
-  const response = await openai.chat.completions.create({
+  const response = await client().chat.completions.create({
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     temperature: 0,
     max_tokens: 5,
