@@ -55,14 +55,14 @@ function extractComment(change) {
 
   if (change.field === 'feed') {
     if (value.item !== 'comment' || value.verb !== 'add') return null;
-    return { commentId: value.comment_id, authorId: value.from?.id, inlineText: value.message };
+    return { commentId: value.comment_id, authorId: value.from?.id, inlineText: value.message, platform: 'facebook' };
   }
 
   if (change.field === 'comments') {
     // Instagram's "comments" field has no verb on plain new-comment
     // events; only skip if one is present and explicitly not "add".
     if (value.verb && value.verb !== 'add') return null;
-    return { commentId: value.id, authorId: value.from?.id, inlineText: value.text };
+    return { commentId: value.id, authorId: value.from?.id, inlineText: value.text, platform: 'instagram' };
   }
 
   return null;
@@ -74,7 +74,7 @@ async function processEntries(entries) {
       const comment = extractComment(change);
       if (!comment) continue;
 
-      const { commentId, authorId, inlineText } = comment;
+      const { commentId, authorId, inlineText, platform } = comment;
       if (!commentId) continue;
 
       // Skip the Page/IG account's own comments/replies so the bot
@@ -87,12 +87,12 @@ async function processEntries(entries) {
 
       // Neither platform's webhook payload reliably includes the comment
       // text inline on current Graph API versions, so fetch it if missing.
-      const text = typeof inlineText === 'string' ? inlineText : await getCommentText(commentId);
+      const text = typeof inlineText === 'string' ? inlineText : await getCommentText(commentId, platform);
       if (typeof text !== 'string') continue;
 
       try {
         const verdict = (await shouldDelete(text)) ? 'DELETE' : 'KEEP';
-        const deleted = verdict === 'DELETE' ? await deleteComment(commentId) : false;
+        const deleted = verdict === 'DELETE' ? await deleteComment(commentId, platform) : false;
         console.log(`Comment ${commentId}: ${verdict}`);
         eventLog.record({ commentId, text, verdict, deleted });
       } catch (err) {
