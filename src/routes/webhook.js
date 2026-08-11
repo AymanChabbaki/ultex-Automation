@@ -1,7 +1,7 @@
 const express = require('express');
 const { verifySignature } = require('../middleware/verifySignature');
 const { shouldDelete } = require('../services/moderation');
-const { deleteComment } = require('../services/facebook');
+const { getCommentText, deleteComment } = require('../services/facebook');
 const eventLog = require('../services/eventLog');
 
 const router = express.Router();
@@ -36,9 +36,6 @@ router.post('/', verifySignature, (req, res) => {
   // Ack immediately: Meta expects a fast 200 and will retry (and may
   // eventually unsubscribe the endpoint) if processing is slow.
   res.sendStatus(200);
-  // TEMP: dump the raw payload shape while we confirm field names for
-  // this Graph API version. Remove once a real comment gets processed.
-  console.log('Webhook payload:', JSON.stringify(req.body));
   processEntries(req.body?.entry || []).catch((err) =>
     console.error('Error processing webhook payload:', err)
   );
@@ -47,7 +44,6 @@ router.post('/', verifySignature, (req, res) => {
 async function processEntries(entries) {
   for (const entry of entries) {
     for (const change of entry.changes || []) {
-      console.log(`Change: field=${change.field} value=${JSON.stringify(change.value)}`);
       if (change.field !== 'feed') continue;
 
       const value = change.value || {};
@@ -55,16 +51,22 @@ async function processEntries(entries) {
 
       // Skip the Page's own comments/replies so the bot never
       // evaluates or deletes its own activity.
-      if (value.sender_id && value.sender_id === process.env.PAGE_ID) continue;
+      if (value.from?.id && value.from.id === process.env.PAGE_ID) continue;
 
       const commentId = value.comment_id;
-      const text = value.message;
-      if (!commentId || typeof text !== 'string') continue;
+      if (!commentId) continue;
       if (alreadyProcessed(commentId)) continue;
+
+      // This Graph API version's payload doesn't include the comment
+      // text inline, so fetch it. Fall back to an inline value.message
+      // in case a future/older payload shape does include it directly.
+      const text = typeof value.message === 'string' ? value.message : await getCommentText(commentId);
+      if (typeof text !== 'string') continue;
 
       try {
         const verdict = (await shouldDelete(text)) ? 'DELETE' : 'KEEP';
         const deleted = verdict === 'DELETE' ? await deleteComment(commentId) : false;
+        console.log(`Comment ${commentId}: ${verdict}`);
         eventLog.record({ commentId, text, verdict, deleted });
       } catch (err) {
         console.error(`Error moderating comment ${commentId}:`, err.message);
