@@ -48,9 +48,10 @@ async function getCommentText(commentId, platform) {
 }
 
 /**
- * Deletes a comment via the Graph API. Returns false (rather than
- * throwing) on failure so the caller can log and move on to the next
- * webhook event instead of the whole batch failing.
+ * Deletes a comment via the Graph API. Returns { ok, error } rather than
+ * throwing so the caller (automatic moderation, or a manual delete from
+ * the dashboard) can log and move on, or show the specific failure
+ * reason to a human, instead of the whole batch/request failing.
  */
 async function deleteComment(commentId, platform) {
   const { base, token } = targetFor(platform);
@@ -61,11 +62,11 @@ async function deleteComment(commentId, platform) {
       params: { access_token: token },
     });
     console.log(`Deleted comment ${commentId}`);
-    return true;
+    return { ok: true };
   } catch (error) {
-    const detail = error.response?.data || error.message;
+    const detail = error.response?.data?.error?.message || error.response?.data || error.message;
     console.error(`Failed to delete comment ${commentId}:`, detail);
-    return false;
+    return { ok: false, error: typeof detail === 'string' ? detail : JSON.stringify(detail) };
   }
 }
 

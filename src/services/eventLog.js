@@ -43,6 +43,38 @@ function list(limit = 100) {
   return events.slice(-limit).reverse();
 }
 
+function getByCommentId(commentId) {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].commentId === commentId) return events[i];
+  }
+  return null;
+}
+
+/**
+ * Marks a comment as deleted after a manual action from the dashboard
+ * (used when the moderation model missed something). Mutates the most
+ * recent matching in-memory record and rewrites the on-disk log from
+ * the full in-memory array -- the log is append-only for normal webhook
+ * events, but a manual correction is rare enough that a full rewrite
+ * here is simpler and safer than trying to patch one line in place.
+ */
+function markDeleted(commentId) {
+  const entry = getByCommentId(commentId);
+  if (!entry) return null;
+
+  entry.deleted = true;
+  entry.verdict = 'DELETE';
+  entry.manual = true;
+  delete entry.error;
+
+  fs.mkdir(DATA_DIR, { recursive: true }, () => {
+    const body = events.map((e) => JSON.stringify(e)).join('\n') + '\n';
+    fs.writeFile(LOG_FILE, body, () => {});
+  });
+
+  return entry;
+}
+
 function stats() {
   const total = events.length;
   const deleted = events.filter((e) => e.deleted).length;
@@ -53,4 +85,4 @@ function stats() {
   return { total, deleted, kept, errors, facebook, instagram };
 }
 
-module.exports = { record, list, stats };
+module.exports = { record, list, stats, getByCommentId, markDeleted };

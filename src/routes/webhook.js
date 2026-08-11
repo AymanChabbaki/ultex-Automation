@@ -104,9 +104,9 @@ async function processEntries(entries) {
 
       try {
         const verdict = (await shouldDelete(text)) ? 'DELETE' : 'KEEP';
-        const deleted = verdict === 'DELETE' ? await deleteComment(commentId, platform) : false;
+        const deleteResult = verdict === 'DELETE' ? await deleteComment(commentId, platform) : { ok: false };
         console.log(`Comment ${commentId}: ${verdict}`);
-        eventLog.record({ commentId, text, verdict, deleted, platform, author: authorName });
+        eventLog.record({ commentId, text, verdict, deleted: deleteResult.ok, platform, author: authorName });
       } catch (err) {
         console.error(`Error moderating comment ${commentId}:`, err.message);
         eventLog.record({ commentId, text, verdict: null, deleted: false, error: err.message, platform, author: authorName });

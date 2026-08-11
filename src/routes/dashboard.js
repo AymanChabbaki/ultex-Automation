@@ -1,6 +1,7 @@
 const express = require('express');
 const { basicAuth } = require('../middleware/basicAuth');
 const eventLog = require('../services/eventLog');
+const { deleteComment } = require('../services/facebook');
 
 const router = express.Router();
 router.use(basicAuth);
@@ -8,6 +9,29 @@ router.use(basicAuth);
 router.get('/api/events', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 300, 1000);
   res.json({ stats: eventLog.stats(), events: eventLog.list(limit) });
+});
+
+// Manual delete, for when the moderation model missed a comment it
+// should have flagged. Same Graph API call the automatic path uses,
+// triggered by a human from the dashboard instead of a webhook event.
+router.post('/api/events/:commentId/delete', async (req, res) => {
+  const { commentId } = req.params;
+  const entry = eventLog.getByCommentId(commentId);
+
+  if (!entry) {
+    return res.status(404).json({ success: false, error: 'Unknown comment ID' });
+  }
+  if (entry.deleted) {
+    return res.json({ success: true, event: entry });
+  }
+
+  const result = await deleteComment(commentId, entry.platform);
+  if (!result.ok) {
+    return res.status(502).json({ success: false, error: result.error });
+  }
+
+  const updated = eventLog.markDeleted(commentId);
+  res.json({ success: true, event: updated });
 });
 
 router.get('/dashboard', (_req, res) => {
@@ -130,6 +154,34 @@ const DASHBOARD_HTML = `<!doctype html>
   .toolbar button:hover { border-color: var(--accent); }
   .count-hint { color: var(--muted); font-size: 12px; margin-left: auto; }
 
+  .presets { display: flex; gap: 4px; }
+  .presets button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 7px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .presets button:hover { border-color: var(--accent); color: var(--text); }
+  .presets button.active { border-color: var(--accent); color: var(--text); background: rgba(91,141,239,0.12); }
+  .date-sep { color: var(--muted); font-size: 12px; }
+
+  .delete-btn {
+    background: transparent;
+    border: 1px solid var(--delete);
+    color: var(--delete);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .delete-btn:hover { background: rgba(240,85,91,0.12); }
+  .delete-btn:disabled { opacity: 0.5; cursor: default; }
+  .manual-tag { color: var(--muted); font-size: 11px; font-weight: 400; }
+
   .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
   table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 720px; }
   th, td {
@@ -211,6 +263,18 @@ const DASHBOARD_HTML = `<!doctype html>
     </select>
     <input type="search" id="search" placeholder="Search comment text or author&hellip;">
     <button id="refreshBtn" type="button">Refresh</button>
+  </div>
+
+  <div class="toolbar">
+    <div class="presets" id="datePresets">
+      <button type="button" data-days="1">Today</button>
+      <button type="button" data-days="7">7 days</button>
+      <button type="button" data-days="30">30 days</button>
+      <button type="button" data-days="0" class="active">All time</button>
+    </div>
+    <input type="date" id="dateFrom">
+    <span class="date-sep">&ndash;</span>
+    <input type="date" id="dateTo">
     <span class="count-hint" id="countHint"></span>
   </div>
 
@@ -223,7 +287,7 @@ const DASHBOARD_HTML = `<!doctype html>
           <th style="width:130px">Author</th>
           <th>Comment</th>
           <th style="width:90px">Verdict</th>
-          <th style="width:80px">Deleted</th>
+          <th style="width:110px">Deleted</th>
         </tr>
       </thead>
       <tbody id="rows"></tbody>
@@ -312,10 +376,21 @@ function renderChart(events) {
   svg.innerHTML = out;
 }
 
+function deletedCell(e) {
+  if (e.deleted) {
+    return '<span class="deleted-yes">Yes' + (e.manual ? ' <span class="manual-tag">(manual)</span>' : '') + '</span>';
+  }
+  return '<button class="delete-btn" data-id="' + encodeURIComponent(e.commentId) + '" type="button">Delete</button>';
+}
+
 function applyFiltersAndRender() {
   const platform = document.getElementById('platformFilter').value;
   const verdict = document.getElementById('verdictFilter').value;
   const search = document.getElementById('search').value.trim().toLowerCase();
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo = document.getElementById('dateTo').value;
+  const fromMs = dateFrom ? new Date(dateFrom + 'T00:00:00').getTime() : null;
+  const toMs = dateTo ? new Date(dateTo + 'T23:59:59.999').getTime() : null;
 
   const filtered = allEvents.filter((e) => {
     if (platform && e.platform !== platform) return false;
@@ -326,6 +401,9 @@ function applyFiltersAndRender() {
       const hay = ((e.text || '') + ' ' + (e.author || '')).toLowerCase();
       if (!hay.includes(search)) return false;
     }
+    const t = new Date(e.timestamp).getTime();
+    if (fromMs !== null && t < fromMs) return false;
+    if (toMs !== null && t > toMs) return false;
     return true;
   });
 
@@ -347,7 +425,7 @@ function applyFiltersAndRender() {
         '<td class="author">' + (e.author ? escapeHtml(e.author) : '<span class="muted">&mdash;</span>') + '</td>' +
         '<td class="text"><div class="full">' + escapeHtml(e.text || '') + '</div>' + (e.error ? '<div class="err">' + escapeHtml(e.error) + '</div>' : '') + '</td>' +
         '<td><span class="badge ' + badgeClass + '">' + badgeLabel + '</span></td>' +
-        '<td class="' + (e.deleted ? 'deleted-yes' : 'deleted-no') + '">' + (e.deleted ? 'Yes' : 'No') + '</td>' +
+        '<td>' + deletedCell(e) + '</td>' +
         '</tr>';
     }).join('');
   }
@@ -368,6 +446,61 @@ document.getElementById('platformFilter').addEventListener('change', applyFilter
 document.getElementById('verdictFilter').addEventListener('change', applyFiltersAndRender);
 document.getElementById('search').addEventListener('input', applyFiltersAndRender);
 document.getElementById('refreshBtn').addEventListener('click', load);
+
+function toLocalDateInput(d) {
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+
+document.getElementById('datePresets').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button');
+  if (!btn) return;
+  document.querySelectorAll('#datePresets button').forEach((b) => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  const days = parseInt(btn.dataset.days, 10);
+  if (days === 0) {
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+  } else {
+    const to = new Date();
+    const from = new Date(Date.now() - (days - 1) * 86400000);
+    document.getElementById('dateFrom').value = toLocalDateInput(from);
+    document.getElementById('dateTo').value = toLocalDateInput(to);
+  }
+  applyFiltersAndRender();
+});
+
+function clearPresetActive() {
+  document.querySelectorAll('#datePresets button').forEach((b) => b.classList.remove('active'));
+}
+document.getElementById('dateFrom').addEventListener('change', () => { clearPresetActive(); applyFiltersAndRender(); });
+document.getElementById('dateTo').addEventListener('change', () => { clearPresetActive(); applyFiltersAndRender(); });
+
+document.getElementById('rows').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('.delete-btn');
+  if (!btn) return;
+  const commentId = decodeURIComponent(btn.dataset.id);
+  if (!confirm('Delete this comment? This cannot be undone.')) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    const res = await fetch('api/events/' + encodeURIComponent(commentId) + '/delete', { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) {
+      alert('Failed to delete: ' + (data.error || 'unknown error'));
+      btn.disabled = false;
+      btn.textContent = 'Delete';
+      return;
+    }
+    await load();
+  } catch (err) {
+    alert('Failed to delete: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Delete';
+  }
+});
 
 load();
 setInterval(load, 15000);
