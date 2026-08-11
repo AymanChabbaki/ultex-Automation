@@ -48,7 +48,9 @@ function stats() {
   const deleted = events.filter((e) => e.deleted).length;
   const kept = events.filter((e) => e.verdict === 'KEEP').length;
   const errors = events.filter((e) => e.error).length;
-  return { total, deleted, kept, errors };
+  const facebook = events.filter((e) => e.platform === 'facebook').length;
+  const instagram = events.filter((e) => e.platform === 'instagram').length;
+  return { total, deleted, kept, errors, facebook, instagram };
 }
 
 module.exports = { record, list, stats };

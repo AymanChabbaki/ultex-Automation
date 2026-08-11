@@ -55,14 +55,26 @@ function extractComment(change) {
 
   if (change.field === 'feed') {
     if (value.item !== 'comment' || value.verb !== 'add') return null;
-    return { commentId: value.comment_id, authorId: value.from?.id, inlineText: value.message, platform: 'facebook' };
+    return {
+      commentId: value.comment_id,
+      authorId: value.from?.id,
+      authorName: value.from?.name,
+      inlineText: value.message,
+      platform: 'facebook',
+    };
   }
 
   if (change.field === 'comments') {
     // Instagram's "comments" field has no verb on plain new-comment
     // events; only skip if one is present and explicitly not "add".
     if (value.verb && value.verb !== 'add') return null;
-    return { commentId: value.id, authorId: value.from?.id, inlineText: value.text, platform: 'instagram' };
+    return {
+      commentId: value.id,
+      authorId: value.from?.id,
+      authorName: value.from?.username,
+      inlineText: value.text,
+      platform: 'instagram',
+    };
   }
 
   return null;
@@ -74,7 +86,7 @@ async function processEntries(entries) {
       const comment = extractComment(change);
       if (!comment) continue;
 
-      const { commentId, authorId, inlineText, platform } = comment;
+      const { commentId, authorId, authorName, inlineText, platform } = comment;
       if (!commentId) continue;
 
       // Skip the Page/IG account's own comments/replies so the bot
@@ -94,10 +106,10 @@ async function processEntries(entries) {
         const verdict = (await shouldDelete(text)) ? 'DELETE' : 'KEEP';
         const deleted = verdict === 'DELETE' ? await deleteComment(commentId, platform) : false;
         console.log(`Comment ${commentId}: ${verdict}`);
-        eventLog.record({ commentId, text, verdict, deleted });
+        eventLog.record({ commentId, text, verdict, deleted, platform, author: authorName });
       } catch (err) {
         console.error(`Error moderating comment ${commentId}:`, err.message);
-        eventLog.record({ commentId, text, verdict: null, deleted: false, error: err.message });
+        eventLog.record({ commentId, text, verdict: null, deleted: false, error: err.message, platform, author: authorName });
       }
     }
   }

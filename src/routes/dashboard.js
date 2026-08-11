@@ -6,7 +6,7 @@ const router = express.Router();
 router.use(basicAuth);
 
 router.get('/api/events', (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 1000);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 300, 1000);
   res.json({ stats: eventLog.stats(), events: eventLog.list(limit) });
 });
 
@@ -23,14 +23,20 @@ const DASHBOARD_HTML = `<!doctype html>
 <style>
   :root {
     color-scheme: light dark;
-    --bg: #0f1115;
-    --panel: #171a21;
-    --border: #2a2e37;
-    --text: #e6e8eb;
-    --muted: #9098a4;
-    --delete: #e5484d;
-    --keep: #30a46c;
-    --error: #f5a623;
+    --bg: #0b0d12;
+    --panel: #151822;
+    --panel-2: #1b1f2b;
+    --border: #262b38;
+    --text: #eceef2;
+    --muted: #8b93a3;
+    --accent: #5b8def;
+    --delete: #f0555b;
+    --keep: #34b874;
+    --error: #f0a83b;
+    --fb: #5b8def;
+    --ig: #d push6cc9;
+    --ig: #d65cc9;
+    --radius: 10px;
   }
   * { box-sizing: border-box; }
   body {
@@ -38,60 +44,196 @@ const DASHBOARD_HTML = `<!doctype html>
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
-    padding: 24px;
+    padding: 28px 32px 60px;
   }
-  h1 { font-size: 18px; font-weight: 600; margin: 0 0 20px; }
-  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+  h1 { font-size: 19px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  h1 span.sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 10px; }
+  .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .live .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--keep);
+    box-shadow: 0 0 0 0 rgba(52,184,116,0.5);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(52,184,116,0.45); }
+    70% { box-shadow: 0 0 0 6px rgba(52,184,116,0); }
+    100% { box-shadow: 0 0 0 0 rgba(52,184,116,0); }
+  }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px; }
   .stat {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 18px;
-    min-width: 110px;
+    border-radius: var(--radius);
+    padding: 14px 16px;
   }
-  .stat .value { font-size: 24px; font-weight: 700; }
-  .stat .label { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .stat .value { font-size: 24px; font-weight: 700; line-height: 1.2; }
+  .stat .label { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .stat.accent-delete .value { color: var(--delete); }
+  .stat.accent-keep .value { color: var(--keep); }
+  .stat.accent-error .value { color: var(--error); }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 20px;
+  }
+  .panel-title {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 12px;
+  }
+  #chart { width: 100%; height: 90px; display: block; overflow: visible; }
+  #chart rect { transition: opacity 0.1s; }
+  #chart rect:hover { opacity: 0.75; }
+  .chart-legend { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .chart-legend .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .toolbar select, .toolbar input {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 7px 10px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .toolbar input[type="search"] { flex: 1; min-width: 160px; }
+  .toolbar button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .toolbar button:hover { border-color: var(--accent); }
+  .count-hint { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 720px; }
   th, td {
     text-align: left;
-    padding: 8px 10px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--border);
     vertical-align: top;
   }
-  th { color: var(--muted); font-weight: 500; font-size: 12px; }
-  td.text { max-width: 480px; white-space: pre-wrap; word-break: break-word; }
-  .badge {
-    display: inline-block;
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--panel-2); }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; background: var(--panel); }
+  td.time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.author { white-space: nowrap; color: var(--muted); }
+  td.text { max-width: 420px; }
+  td.text .full { white-space: pre-wrap; word-break: break-word; }
+  td.text .err { color: var(--error); font-size: 12px; margin-top: 4px; }
+
+  .platform-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     padding: 2px 8px;
     border-radius: 999px;
     font-size: 11px;
     font-weight: 600;
+    white-space: nowrap;
   }
-  .badge.DELETE { background: rgba(229,72,77,0.15); color: var(--delete); }
-  .badge.KEEP { background: rgba(48,166,108,0.15); color: var(--keep); }
-  .badge.ERROR { background: rgba(245,166,35,0.15); color: var(--error); }
+  .platform-badge.facebook { background: rgba(91,141,239,0.15); color: var(--fb); }
+  .platform-badge.instagram { background: rgba(214,92,201,0.15); color: var(--ig); }
+  .platform-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .badge.DELETE { background: rgba(240,85,91,0.15); color: var(--delete); }
+  .badge.KEEP { background: rgba(52,184,116,0.15); color: var(--keep); }
+  .badge.ERROR { background: rgba(240,168,59,0.15); color: var(--error); }
+
+  .deleted-yes { color: var(--delete); font-weight: 600; }
+  .deleted-no { color: var(--muted); }
+
   .muted { color: var(--muted); }
-  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
-  #updated { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  .empty { color: var(--muted); padding: 50px 0; text-align: center; font-size: 13px; }
 </style>
 </head>
 <body>
-  <h1>Comment Moderation Dashboard</h1>
-  <div id="updated"></div>
+  <header>
+    <h1>Comment Moderation<span class="sub">Facebook &amp; Instagram</span></h1>
+    <span class="live"><span class="dot"></span><span id="updated">Loading&hellip;</span></span>
+  </header>
+
   <div class="stats" id="stats"></div>
-  <table>
-    <thead>
-      <tr><th>Time</th><th>Comment</th><th style="width:90px">Verdict</th><th style="width:70px">Deleted</th></tr>
-    </thead>
-    <tbody id="rows"></tbody>
-  </table>
-  <div class="empty" id="empty" style="display:none">No comments processed yet.</div>
+
+  <div class="panel">
+    <div class="panel-title">Activity, last 24h</div>
+    <svg id="chart" viewBox="0 0 960 90" preserveAspectRatio="none"></svg>
+    <div class="chart-legend">
+      <span><span class="sw" style="background:var(--delete)"></span>Deleted</span>
+      <span><span class="sw" style="background:var(--keep)"></span>Kept</span>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <select id="platformFilter">
+      <option value="">All platforms</option>
+      <option value="facebook">Facebook</option>
+      <option value="instagram">Instagram</option>
+    </select>
+    <select id="verdictFilter">
+      <option value="">All verdicts</option>
+      <option value="DELETE">Deleted</option>
+      <option value="KEEP">Kept</option>
+      <option value="ERROR">Errors</option>
+    </select>
+    <input type="search" id="search" placeholder="Search comment text or author&hellip;">
+    <button id="refreshBtn" type="button">Refresh</button>
+    <span class="count-hint" id="countHint"></span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:110px">Time</th>
+          <th style="width:110px">Platform</th>
+          <th style="width:130px">Author</th>
+          <th>Comment</th>
+          <th style="width:90px">Verdict</th>
+          <th style="width:80px">Deleted</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <div class="empty" id="empty" style="display:none">No comments match the current filters.</div>
 
 <script>
-function fmtTime(iso) {
-  const d = new Date(iso);
-  return d.toLocaleString();
-}
+let allEvents = [];
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
@@ -99,41 +241,134 @@ function escapeHtml(s) {
   }[c]));
 }
 
-async function load() {
-  const res = await fetch('api/events?limit=200');
-  if (!res.ok) return;
-  const { stats, events } = await res.json();
+function relativeTime(iso) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diffMs / 1000);
+  if (s < 60) return s + 's ago';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  const d = Math.floor(h / 24);
+  return d + 'd ago';
+}
 
-  document.getElementById('stats').innerHTML = [
-    ['Total', stats.total],
-    ['Deleted', stats.deleted],
-    ['Kept', stats.kept],
-    ['Errors', stats.errors],
-  ].map(([label, value]) =>
-    '<div class="stat"><div class="value">' + value + '</div><div class="label">' + label + '</div></div>'
+function platformBadge(p) {
+  if (p === 'instagram') return '<span class="platform-badge instagram"><span class="dot"></span>Instagram</span>';
+  if (p === 'facebook') return '<span class="platform-badge facebook"><span class="dot"></span>Facebook</span>';
+  return '<span class="muted">&mdash;</span>';
+}
+
+function renderStats(stats) {
+  const rate = stats.total ? Math.round((stats.deleted / stats.total) * 100) : 0;
+  const cards = [
+    ['value', 'Total', stats.total],
+    ['accent-delete', 'Deleted', stats.deleted],
+    ['accent-keep', 'Kept', stats.kept],
+    ['accent-error', 'Errors', stats.errors],
+    ['value', 'Delete rate', rate + '%'],
+    ['value', 'FB / IG', stats.facebook + ' / ' + stats.instagram],
+  ];
+  document.getElementById('stats').innerHTML = cards.map(([cls, label, value]) =>
+    '<div class="stat ' + (cls === 'value' ? '' : cls) + '"><div class="value">' + value + '</div><div class="label">' + label + '</div></div>'
   ).join('');
+}
+
+function renderChart(events) {
+  const buckets = 24;
+  const now = Date.now();
+  const hourMs = 3600 * 1000;
+  const counts = Array.from({ length: buckets }, () => ({ deleted: 0, kept: 0 }));
+
+  for (const e of events) {
+    const age = now - new Date(e.timestamp).getTime();
+    const bucket = buckets - 1 - Math.floor(age / hourMs);
+    if (bucket < 0 || bucket >= buckets) continue;
+    if (e.deleted) counts[bucket].deleted++;
+    else if (e.verdict === 'KEEP') counts[bucket].kept++;
+  }
+
+  const maxCount = Math.max(1, ...counts.map((c) => c.deleted + c.kept));
+  const width = 960, height = 90, gap = 3;
+  const barW = (width / buckets) - gap;
+  const svg = document.getElementById('chart');
+  let out = '';
+
+  counts.forEach((c, i) => {
+    const x = i * (width / buckets) + gap / 2;
+    const total = c.deleted + c.kept;
+    const scale = (height - 4) / maxCount;
+    const keptH = c.kept * scale;
+    const delH = c.deleted * scale;
+    const hoursAgo = buckets - 1 - i;
+    const title = hoursAgo === 0 ? 'This hour' : hoursAgo + 'h ago';
+    if (total === 0) {
+      out += '<rect x="' + x + '" y="' + (height - 2) + '" width="' + barW + '" height="2" rx="1" fill="var(--border)"><title>' + title + ': no activity</title></rect>';
+    } else {
+      out += '<rect x="' + x + '" y="' + (height - keptH) + '" width="' + barW + '" height="' + Math.max(keptH, 1) + '" rx="1" fill="var(--keep)"><title>' + title + ': ' + c.kept + ' kept</title></rect>';
+      out += '<rect x="' + x + '" y="' + (height - keptH - delH) + '" width="' + barW + '" height="' + Math.max(delH, delH > 0 ? 1 : 0) + '" rx="1" fill="var(--delete)"><title>' + title + ': ' + c.deleted + ' deleted</title></rect>';
+    }
+  });
+
+  svg.innerHTML = out;
+}
+
+function applyFiltersAndRender() {
+  const platform = document.getElementById('platformFilter').value;
+  const verdict = document.getElementById('verdictFilter').value;
+  const search = document.getElementById('search').value.trim().toLowerCase();
+
+  const filtered = allEvents.filter((e) => {
+    if (platform && e.platform !== platform) return false;
+    if (verdict === 'ERROR' && !e.error) return false;
+    if (verdict === 'DELETE' && e.verdict !== 'DELETE') return false;
+    if (verdict === 'KEEP' && e.verdict !== 'KEEP') return false;
+    if (search) {
+      const hay = ((e.text || '') + ' ' + (e.author || '')).toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  document.getElementById('countHint').textContent = filtered.length + ' of ' + allEvents.length + ' shown';
 
   const rowsEl = document.getElementById('rows');
   const emptyEl = document.getElementById('empty');
-  if (events.length === 0) {
+  if (filtered.length === 0) {
     rowsEl.innerHTML = '';
     emptyEl.style.display = 'block';
   } else {
     emptyEl.style.display = 'none';
-    rowsEl.innerHTML = events.map((e) => {
+    rowsEl.innerHTML = filtered.map((e) => {
       const badgeClass = e.error ? 'ERROR' : e.verdict;
       const badgeLabel = e.error ? 'ERROR' : e.verdict;
       return '<tr>' +
-        '<td class="muted">' + fmtTime(e.timestamp) + '</td>' +
-        '<td class="text">' + escapeHtml(e.text || '') + (e.error ? '<div class="muted">' + escapeHtml(e.error) + '</div>' : '') + '</td>' +
+        '<td class="time" title="' + new Date(e.timestamp).toLocaleString() + '">' + relativeTime(e.timestamp) + '</td>' +
+        '<td>' + platformBadge(e.platform) + '</td>' +
+        '<td class="author">' + (e.author ? escapeHtml(e.author) : '<span class="muted">&mdash;</span>') + '</td>' +
+        '<td class="text"><div class="full">' + escapeHtml(e.text || '') + '</div>' + (e.error ? '<div class="err">' + escapeHtml(e.error) + '</div>' : '') + '</td>' +
         '<td><span class="badge ' + badgeClass + '">' + badgeLabel + '</span></td>' +
-        '<td>' + (e.deleted ? 'yes' : 'no') + '</td>' +
+        '<td class="' + (e.deleted ? 'deleted-yes' : 'deleted-no') + '">' + (e.deleted ? 'Yes' : 'No') + '</td>' +
         '</tr>';
     }).join('');
   }
+}
 
+async function load() {
+  const res = await fetch('api/events?limit=500');
+  if (!res.ok) return;
+  const { stats, events } = await res.json();
+  allEvents = events;
+  renderStats(stats);
+  renderChart(events);
+  applyFiltersAndRender();
   document.getElementById('updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
+
+document.getElementById('platformFilter').addEventListener('change', applyFiltersAndRender);
+document.getElementById('verdictFilter').addEventListener('change', applyFiltersAndRender);
+document.getElementById('search').addEventListener('input', applyFiltersAndRender);
+document.getElementById('refreshBtn').addEventListener('click', load);
 
 load();
 setInterval(load, 15000);
