@@ -34,7 +34,6 @@ const DASHBOARD_HTML = `<!doctype html>
     --keep: #34b874;
     --error: #f0a83b;
     --fb: #5b8def;
-    --ig: #d push6cc9;
     --ig: #d65cc9;
     --radius: 10px;
   }
