@@ -3,6 +3,7 @@ const { verifySignature } = require('../middleware/verifySignature');
 const { shouldDelete } = require('../services/moderation');
 const { getCommentText, deleteComment } = require('../services/facebook');
 const eventLog = require('../services/eventLog');
+const blocklist = require('../services/blocklist');
 
 const router = express.Router();
 
@@ -102,14 +103,26 @@ async function processEntries(entries) {
       const text = typeof inlineText === 'string' ? inlineText : await getCommentText(commentId, platform);
       if (typeof text !== 'string') continue;
 
+      // A previously-deleted author's comments get removed on sight,
+      // skipping the OpenAI call entirely -- both faster and cheaper
+      // than re-evaluating someone who's already shown they post junk.
+      const isRepeatOffender = blocklist.isBlocked(platform, authorId);
+
       try {
-        const verdict = (await shouldDelete(text)) ? 'DELETE' : 'KEEP';
+        const verdict = isRepeatOffender ? 'DELETE' : (await shouldDelete(text)) ? 'DELETE' : 'KEEP';
         const deleteResult = verdict === 'DELETE' ? await deleteComment(commentId, platform) : { ok: false };
-        console.log(`Comment ${commentId}: ${verdict}`);
-        eventLog.record({ commentId, text, verdict, deleted: deleteResult.ok, platform, author: authorName });
+        console.log(`Comment ${commentId}: ${verdict}${isRepeatOffender ? ' (blocklisted author, skipped AI check)' : ''}`);
+        eventLog.record({
+          commentId, text, verdict, deleted: deleteResult.ok, platform,
+          author: authorName, authorId, autoBlocked: isRepeatOffender,
+        });
+
+        if (verdict === 'DELETE' && !isRepeatOffender) {
+          blocklist.block(platform, authorId, authorName, commentId);
+        }
       } catch (err) {
         console.error(`Error moderating comment ${commentId}:`, err.message);
-        eventLog.record({ commentId, text, verdict: null, deleted: false, error: err.message, platform, author: authorName });
+        eventLog.record({ commentId, text, verdict: null, deleted: false, error: err.message, platform, author: authorName, authorId });
       }
     }
   }

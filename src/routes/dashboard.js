@@ -1,6 +1,7 @@
 const express = require('express');
 const { basicAuth } = require('../middleware/basicAuth');
 const eventLog = require('../services/eventLog');
+const blocklist = require('../services/blocklist');
 const { deleteComment } = require('../services/facebook');
 
 const router = express.Router();
@@ -14,6 +15,8 @@ router.get('/api/events', (req, res) => {
 // Manual delete, for when the moderation model missed a comment it
 // should have flagged. Same Graph API call the automatic path uses,
 // triggered by a human from the dashboard instead of a webhook event.
+// Also blocklists the author, same as an AI-caught delete, so a human
+// catching what the model missed still prevents their next comment.
 router.post('/api/events/:commentId/delete', async (req, res) => {
   const { commentId } = req.params;
   const entry = eventLog.getByCommentId(commentId);
@@ -31,7 +34,23 @@ router.post('/api/events/:commentId/delete', async (req, res) => {
   }
 
   const updated = eventLog.markDeleted(commentId);
+  if (entry.authorId) {
+    blocklist.block(entry.platform, entry.authorId, entry.author, commentId);
+  }
   res.json({ success: true, event: updated });
+});
+
+router.get('/api/blocklist', (_req, res) => {
+  res.json({ blocked: blocklist.list() });
+});
+
+router.post('/api/blocklist/unblock', (req, res) => {
+  const { platform, authorId } = req.body || {};
+  if (!platform || !authorId) {
+    return res.status(400).json({ success: false, error: 'platform and authorId are required' });
+  }
+  const existed = blocklist.unblock(platform, authorId);
+  res.json({ success: existed });
 });
 
 router.get('/dashboard', (_req, res) => {
@@ -227,9 +246,47 @@ const DASHBOARD_HTML = `<!doctype html>
 
   .deleted-yes { color: var(--delete); font-weight: 600; }
   .deleted-no { color: var(--muted); }
+  .blocked-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    background: rgba(240,85,91,0.1);
+    color: var(--delete);
+    border: 1px solid rgba(240,85,91,0.3);
+  }
 
   .muted { color: var(--muted); }
   .empty { color: var(--muted); padding: 50px 0; text-align: center; font-size: 13px; }
+
+  details.panel summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  details.panel summary::-webkit-details-marker { display: none; }
+  details.panel summary .panel-title { margin-bottom: 0; }
+  details.panel[open] summary { margin-bottom: 12px; }
+  details.panel summary .chev { color: var(--muted); font-size: 12px; transition: transform 0.15s; }
+  details.panel[open] summary .chev { transform: rotate(90deg); }
+  .blocklist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .blocklist-table td, .blocklist-table th { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: left; }
+  .blocklist-table th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  .blocklist-table tr:last-child td { border-bottom: none; }
+  .unblock-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .unblock-btn:hover { border-color: var(--accent); color: var(--text); }
 </style>
 </head>
 <body>
@@ -239,6 +296,20 @@ const DASHBOARD_HTML = `<!doctype html>
   </header>
 
   <div class="stats" id="stats"></div>
+
+  <details class="panel" id="blocklistPanel">
+    <summary>
+      <span class="panel-title">Blocked authors (<span id="blockedCount">0</span>)</span>
+      <span class="chev">&#9656;</span>
+    </summary>
+    <table class="blocklist-table">
+      <thead>
+        <tr><th>Platform</th><th>Author</th><th>Blocked</th><th style="width:80px"></th></tr>
+      </thead>
+      <tbody id="blocklistRows"></tbody>
+    </table>
+    <div class="empty" id="blocklistEmpty" style="display:none; padding: 16px 0;">No blocked authors yet -- they're added automatically the first time one of their comments is deleted.</div>
+  </details>
 
   <div class="panel">
     <div class="panel-title">Activity, last 24h</div>
@@ -315,6 +386,50 @@ function relativeTime(iso) {
   const d = Math.floor(h / 24);
   return d + 'd ago';
 }
+
+async function loadBlocklist() {
+  const res = await fetch('api/blocklist');
+  if (!res.ok) return;
+  const { blocked } = await res.json();
+
+  document.getElementById('blockedCount').textContent = blocked.length;
+  const rowsEl = document.getElementById('blocklistRows');
+  const emptyEl = document.getElementById('blocklistEmpty');
+
+  if (blocked.length === 0) {
+    rowsEl.innerHTML = '';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  rowsEl.innerHTML = blocked.map((b) => {
+    return '<tr>' +
+      '<td>' + platformBadge(b.platform) + '</td>' +
+      '<td>' + (b.authorName ? escapeHtml(b.authorName) : '<span class="muted">' + escapeHtml(b.authorId) + '</span>') + '</td>' +
+      '<td class="muted" title="' + new Date(b.blockedAt).toLocaleString() + '">' + relativeTime(b.blockedAt) + '</td>' +
+      '<td><button class="unblock-btn" data-platform="' + escapeHtml(b.platform) + '" data-author-id="' + escapeHtml(b.authorId) + '" type="button">Unblock</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+document.getElementById('blocklistRows').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('.unblock-btn');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Unblocking…';
+  try {
+    await fetch('api/blocklist/unblock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: btn.dataset.platform, authorId: btn.dataset.authorId }),
+    });
+    await loadBlocklist();
+  } catch (err) {
+    alert('Failed to unblock: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Unblock';
+  }
+});
 
 function platformBadge(p) {
   if (p === 'instagram') return '<span class="platform-badge instagram"><span class="dot"></span>Instagram</span>';
@@ -424,7 +539,7 @@ function applyFiltersAndRender() {
         '<td>' + platformBadge(e.platform) + '</td>' +
         '<td class="author">' + (e.author ? escapeHtml(e.author) : '<span class="muted">&mdash;</span>') + '</td>' +
         '<td class="text"><div class="full">' + escapeHtml(e.text || '') + '</div>' + (e.error ? '<div class="err">' + escapeHtml(e.error) + '</div>' : '') + '</td>' +
-        '<td><span class="badge ' + badgeClass + '">' + badgeLabel + '</span></td>' +
+        '<td><span class="badge ' + badgeClass + '">' + badgeLabel + '</span>' + (e.autoBlocked ? '<span class="blocked-tag">BLOCKLISTED</span>' : '') + '</td>' +
         '<td>' + deletedCell(e) + '</td>' +
         '</tr>';
     }).join('');
@@ -439,6 +554,7 @@ async function load() {
   renderStats(stats);
   renderChart(events);
   applyFiltersAndRender();
+  await loadBlocklist();
   document.getElementById('updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
