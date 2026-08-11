@@ -36,6 +36,9 @@ router.post('/', verifySignature, (req, res) => {
   // Ack immediately: Meta expects a fast 200 and will retry (and may
   // eventually unsubscribe the endpoint) if processing is slow.
   res.sendStatus(200);
+  // TEMP: dump the raw payload shape while we confirm field names for
+  // this Graph API version. Remove once a real comment gets processed.
+  console.log('Webhook payload:', JSON.stringify(req.body));
   processEntries(req.body?.entry || []).catch((err) =>
     console.error('Error processing webhook payload:', err)
   );
@@ -44,6 +47,7 @@ router.post('/', verifySignature, (req, res) => {
 async function processEntries(entries) {
   for (const entry of entries) {
     for (const change of entry.changes || []) {
+      console.log(`Change: field=${change.field} value=${JSON.stringify(change.value)}`);
       if (change.field !== 'feed') continue;
 
       const value = change.value || {};
