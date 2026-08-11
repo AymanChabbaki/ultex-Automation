@@ -1,8 +1,8 @@
-# FB Comment Moderator
+# FB/IG Comment Moderator
 
-Listens for new comments on a Facebook Page's posts via the Graph API
-webhook, asks OpenAI whether each comment is hate speech/spam/toxic, and
-deletes it if so.
+Listens for new comments on a Facebook Page's posts (and, optionally, a
+linked Instagram account) via the Graph API webhook, asks OpenAI whether
+each comment should be removed, and deletes it if so.
 
 ## Setup
 
@@ -44,6 +44,28 @@ Use the resulting `https://...ngrok-free.app` URL as the callback URL below.
    ```
    Expect `{"success":true}`. Verify anytime with a `GET` to the same URL (drop the POST) — `data` should be non-empty.
 
+## Also moderating Instagram comments
+
+Works the same way, through the same webhook endpoint and the same `PAGE_ACCESS_TOKEN`, for an Instagram
+Business/Creator account linked to this Page:
+
+1. Confirm the IG account is linked: Page Settings > Linked Accounts (or it was linked when the Page was set up).
+2. Regenerate `PAGE_ACCESS_TOKEN` with two extra scopes added: `instagram_basic`, `instagram_manage_comments`
+   (same Graph API Explorer + `/me/accounts` flow as above).
+3. In App Dashboard > Webhooks, switch the object dropdown to **Instagram** and subscribe to the `comments` field
+   (separate from the Page's `feed` subscription above — you need both).
+4. Find the linked IG account's ID: `GET /<PAGE_ID>?fields=instagram_business_account&access_token=<PAGE_ACCESS_TOKEN>`.
+   Put that value in `IG_USER_ID` in `.env` (used to skip the account's own comments/replies).
+5. Subscribe the IG account itself, same as the Page step above but against the IG account ID and `comments` field:
+   ```
+   curl -X POST "https://graph.facebook.com/v19.0/<IG_USER_ID>/subscribed_apps?subscribed_fields=comments&access_token=<PAGE_ACCESS_TOKEN>"
+   ```
+
+If comments don't get processed after this, set `DEBUG_WEBHOOK_PAYLOAD=true` in `.env`, redeploy, post a test IG
+comment, and check the logs for the real payload shape — Instagram's `comments` field payload wasn't verified
+against a live account when this was built, unlike the Facebook `feed` path, which needed exactly this kind of
+live check to get right.
+
 ## How it works
 
 - `GET /webhook` — one-time handshake Meta uses to verify the endpoint.
@@ -52,12 +74,22 @@ Use the resulting `https://...ngrok-free.app` URL as the callback URL below.
   forged requests can't trigger deletions. The server acks with `200`
   immediately, then processes entries asynchronously — Meta expects a
   fast response and will retry/eventually unsubscribe if it's slow.
-- For each `feed` change where `item === "comment"` and `verb === "add"`,
-  and the commenter isn't the Page itself, the comment text is fetched via
-  `GET /{comment-id}?fields=message` (the webhook payload itself doesn't
-  include the comment text on current Graph API versions — only IDs and
-  metadata) and sent to `gpt-4o-mini` with instructions to answer `DELETE`
-  or `KEEP`. `DELETE` triggers a Graph API `DELETE` on the comment.
+- Handles two change shapes: Facebook Page comments (`field === "feed"`,
+  `item === "comment"`, `verb === "add"`) and Instagram comments
+  (`field === "comments"`). For either, once the commenter isn't the
+  Page/IG account itself, the comment text is fetched via
+  `GET /{comment-id}?fields=message,text` (the webhook payload itself
+  doesn't reliably include the comment text — only IDs and metadata) and
+  sent to `gpt-4o-mini` with instructions to answer `DELETE` or `KEEP`.
+  `DELETE` triggers a Graph API `DELETE` on the comment — the same
+  endpoint pattern works for both Facebook and Instagram comment IDs.
+- The moderation prompt currently deletes on hate speech/spam/toxicity
+  **or any negative sentiment at all** (complaints, "I don't recommend
+  this", mild criticism) — not just abuse. It also reads Arabic script
+  and Darija/Arabizi (Latin-script Darija). Adjust the wording in
+  `src/services/moderation.js` if that's more aggressive than intended —
+  removing all negative feedback, not just abusive content, is a real
+  product/reputation decision worth being deliberate about.
 - A bounded in-memory set of recently-seen comment IDs prevents
   Meta's webhook retries (or `edited`/`remove` events for the same
   comment) from re-running moderation on the same comment. This resets

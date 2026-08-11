@@ -2,8 +2,11 @@ const axios = require('axios');
 
 /**
  * Fetches a comment's text. The webhook payload for this Graph API
- * version doesn't include the comment message inline, so it has to be
+ * version doesn't include the comment text inline, so it has to be
  * looked up separately before it can be sent to the moderation model.
+ * Requests both `message` (Facebook Page comments) and `text`
+ * (Instagram comments) since the two platforms name the field
+ * differently on the same underlying comment-object endpoint.
  * Returns null if the comment is unavailable (e.g. already deleted by
  * the author before this call runs).
  */
@@ -13,9 +16,12 @@ async function getCommentText(commentId) {
 
   try {
     const response = await axios.get(url, {
-      params: { fields: 'message', access_token: process.env.PAGE_ACCESS_TOKEN },
+      params: { fields: 'message,text', access_token: process.env.PAGE_ACCESS_TOKEN },
     });
-    return typeof response.data.message === 'string' ? response.data.message : null;
+    const { message, text } = response.data;
+    if (typeof message === 'string') return message;
+    if (typeof text === 'string') return text;
+    return null;
   } catch (error) {
     const detail = error.response?.data || error.message;
     console.error(`Failed to fetch comment ${commentId}:`, detail);
