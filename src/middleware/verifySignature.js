@@ -16,8 +16,10 @@ function captureRawBody(req, _res, buf) {
 function verifySignature(req, res, next) {
   const signature = req.get('x-hub-signature-256');
   const appSecret = process.env.FB_APP_SECRET;
+  console.log(`Webhook POST received (signature header present: ${!!signature})`);
 
   if (!signature || !appSecret) {
+    console.warn('Rejecting webhook POST: missing x-hub-signature-256 header or FB_APP_SECRET is unset');
     return res.sendStatus(401);
   }
 
@@ -28,6 +30,7 @@ function verifySignature(req, res, next) {
   const a = Buffer.from(signature);
   const b = Buffer.from(expected);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    console.warn('Rejecting webhook POST: signature mismatch (check FB_APP_SECRET matches App Dashboard > Settings > Basic)');
     return res.sendStatus(401);
   }
 

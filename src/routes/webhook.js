@@ -2,6 +2,7 @@ const express = require('express');
 const { verifySignature } = require('../middleware/verifySignature');
 const { shouldDelete } = require('../services/moderation');
 const { deleteComment } = require('../services/facebook');
+const eventLog = require('../services/eventLog');
 
 const router = express.Router();
 
@@ -58,11 +59,12 @@ async function processEntries(entries) {
       if (alreadyProcessed(commentId)) continue;
 
       try {
-        if (await shouldDelete(text)) {
-          await deleteComment(commentId);
-        }
+        const verdict = (await shouldDelete(text)) ? 'DELETE' : 'KEEP';
+        const deleted = verdict === 'DELETE' ? await deleteComment(commentId) : false;
+        eventLog.record({ commentId, text, verdict, deleted });
       } catch (err) {
         console.error(`Error moderating comment ${commentId}:`, err.message);
+        eventLog.record({ commentId, text, verdict: null, deleted: false, error: err.message });
       }
     }
   }
