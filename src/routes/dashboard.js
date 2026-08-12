@@ -76,9 +76,17 @@ const DASHBOARD_HTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{CLIENT_NAME}} &ndash; Comment Moderation</title>
+<script>
+  // Runs before first paint so there's no flash of the wrong theme.
+  (function () {
+    var saved = localStorage.getItem('moderation-theme');
+    var theme = saved || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', theme);
+  })();
+</script>
 <style>
   :root {
-    color-scheme: light dark;
+    color-scheme: dark;
     --bg: #0b0d12;
     --panel: #151822;
     --panel-2: #1b1f2b;
@@ -93,6 +101,21 @@ const DASHBOARD_HTML = `<!doctype html>
     --ig: #d65cc9;
     --radius: 10px;
   }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --panel-2: #f0f2f5;
+    --border: #e3e6eb;
+    --text: #1a1d24;
+    --muted: #6b7280;
+    --accent: #3b6fe0;
+    --delete: #d23a40;
+    --keep: #1f9d55;
+    --error: #b8790f;
+    --fb: #3b6fe0;
+    --ig: #b83fa8;
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0;
@@ -100,7 +123,21 @@ const DASHBOARD_HTML = `<!doctype html>
     background: var(--bg);
     color: var(--text);
     padding: 28px 32px 60px;
+    transition: background 0.15s, color 0.15s;
   }
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
   header {
     display: flex;
     align-items: baseline;
@@ -305,7 +342,10 @@ const DASHBOARD_HTML = `<!doctype html>
 <body>
   <header>
     <h1>{{CLIENT_NAME}}<span class="sub">Comment Moderation &middot; Facebook &amp; Instagram</span></h1>
-    <span class="live"><span class="dot"></span><span id="updated">Loading&hellip;</span></span>
+    <div style="display:flex; align-items:center; gap:14px;">
+      <span class="live"><span class="dot"></span><span id="updated">Loading&hellip;</span></span>
+      <button class="theme-toggle" id="themeToggle" type="button"><span id="themeIcon">&#9728;</span> <span id="themeLabel">Light</span></button>
+    </div>
   </header>
 
   <div class="stats" id="stats"></div>
@@ -381,6 +421,21 @@ const DASHBOARD_HTML = `<!doctype html>
 
 <script>
 let allEvents = [];
+
+function applyThemeUi() {
+  const theme = document.documentElement.getAttribute('data-theme');
+  document.getElementById('themeIcon').innerHTML = theme === 'light' ? '&#9728;' : '&#9789;';
+  document.getElementById('themeLabel').textContent = theme === 'light' ? 'Light' : 'Dark';
+}
+applyThemeUi();
+
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('moderation-theme', next);
+  applyThemeUi();
+});
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
