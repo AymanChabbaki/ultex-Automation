@@ -1,3 +1,6 @@
 node_modules/
 .env
 *.log
+# Client access tokens, moderation history, blocklists -- real secrets
+# and customer data once this is live, never committed.
+/data/
