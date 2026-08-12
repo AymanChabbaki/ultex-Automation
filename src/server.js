@@ -4,6 +4,7 @@ const { captureRawBody } = require('./middleware/verifySignature');
 const webhookRouter = require('./routes/webhook');
 const dashboardRouter = require('./routes/dashboard');
 const adminRouter = require('./routes/admin');
+const demoRouter = require('./routes/demo');
 
 // Only FB_VERIFY_TOKEN is needed to serve Meta's GET verify handshake,
 // so that's the only thing fatal at boot. The others are needed once
@@ -35,6 +36,9 @@ app.use(express.json({ verify: captureRawBody }));
 app.use('/webhook', webhookRouter);
 app.use('/webhook', dashboardRouter);
 app.use('/webhook', adminRouter);
+// Public, unauthenticated -- the sandbox demo prospective clients see
+// before they've handed over any Facebook/Instagram access.
+app.use(demoRouter);
 
 app.get('/health', (_req, res) => res.sendStatus(200));
 
