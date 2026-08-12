@@ -11,16 +11,24 @@ router.use(basicAuth);
 // Every route here is scoped to one client -- loads it once per request
 // and 404s up front for an unknown ID, rather than every handler
 // re-checking.
-router.param('clientId', (req, res, next, clientId) => {
-  const client = clients.get(clientId);
-  if (!client) return res.status(404).send('Unknown client');
-  req.client = client;
-  next();
+router.param('clientId', async (req, res, next, clientId) => {
+  try {
+    const client = await clients.get(clientId);
+    if (!client) return res.status(404).send('Unknown client');
+    req.client = client;
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.get('/clients/:clientId/api/events', (req, res) => {
+router.get('/clients/:clientId/api/events', async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 300, 1000);
-  res.json({ stats: eventLog.stats(req.client.id), events: eventLog.list(req.client.id, limit) });
+  const [stats, events] = await Promise.all([
+    eventLog.stats(req.client.id),
+    eventLog.list(req.client.id, limit),
+  ]);
+  res.json({ stats, events });
 });
 
 // Manual delete, for when the moderation model missed a comment it
@@ -31,7 +39,7 @@ router.get('/clients/:clientId/api/events', (req, res) => {
 router.post('/clients/:clientId/api/events/:commentId/delete', async (req, res) => {
   const client = req.client;
   const { commentId } = req.params;
-  const entry = eventLog.getByCommentId(client.id, commentId);
+  const entry = await eventLog.getByCommentId(client.id, commentId);
 
   if (!entry) {
     return res.status(404).json({ success: false, error: 'Unknown comment ID' });
@@ -46,23 +54,23 @@ router.post('/clients/:clientId/api/events/:commentId/delete', async (req, res) 
     return res.status(502).json({ success: false, error: result.error });
   }
 
-  const updated = eventLog.markDeleted(client.id, commentId);
+  const updated = await eventLog.markDeleted(client.id, commentId);
   if (entry.authorId) {
-    blocklist.block(client.id, entry.platform, entry.authorId, entry.author, commentId);
+    await blocklist.block(client.id, entry.platform, entry.authorId, entry.author, commentId);
   }
   res.json({ success: true, event: updated });
 });
 
-router.get('/clients/:clientId/api/blocklist', (req, res) => {
-  res.json({ blocked: blocklist.list(req.client.id) });
+router.get('/clients/:clientId/api/blocklist', async (req, res) => {
+  res.json({ blocked: await blocklist.list(req.client.id) });
 });
 
-router.post('/clients/:clientId/api/blocklist/unblock', (req, res) => {
+router.post('/clients/:clientId/api/blocklist/unblock', async (req, res) => {
   const { platform, authorId } = req.body || {};
   if (!platform || !authorId) {
     return res.status(400).json({ success: false, error: 'platform and authorId are required' });
   }
-  const existed = blocklist.unblock(req.client.id, platform, authorId);
+  const existed = await blocklist.unblock(req.client.id, platform, authorId);
   res.json({ success: existed });
 });
 

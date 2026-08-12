@@ -1,63 +1,46 @@
-const fs = require('fs');
-const path = require('path');
+const db = require('../db');
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data');
-const FILE = path.join(DATA_DIR, 'clients.json');
-
-// A "client" is one onboarded business: their Page/IG credentials and
-// which IDs route incoming webhook events to them. Kept as a simple
-// JSON file + in-memory maps, same pattern as blocklist.js/eventLog.js
-// -- fine at the scale of tens/low-hundreds of clients this is meant
-// for; move to a real DB first if that stops being true.
-let clients = [];
-let byId = new Map();
-let byPageId = new Map();
-let byIgUserId = new Map();
-
-function reindex() {
-  byId = new Map(clients.map((c) => [c.id, c]));
-  byPageId = new Map(clients.filter((c) => c.pageId).map((c) => [c.pageId, c]));
-  byIgUserId = new Map(clients.filter((c) => c.igUserId).map((c) => [c.igUserId, c]));
+function toClient(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    pageId: row.page_id,
+    pageAccessToken: row.page_access_token,
+    igUserId: row.ig_user_id,
+    igAccessToken: row.ig_access_token,
+    active: row.active,
+    createdAt: row.created_at,
+  };
 }
 
-function loadFromDisk() {
-  if (!fs.existsSync(FILE)) return;
-  try {
-    clients = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-  } catch {
-    clients = [];
-  }
-  reindex();
-}
-loadFromDisk();
-
-function persist() {
-  fs.mkdir(DATA_DIR, { recursive: true }, () => {
-    fs.writeFile(FILE, JSON.stringify(clients, null, 2), () => {});
-  });
+async function list() {
+  const { rows } = await db.query('SELECT * FROM clients ORDER BY name');
+  return rows.map(toClient);
 }
 
-function list() {
-  return [...clients].sort((a, b) => a.name.localeCompare(b.name));
+async function get(id) {
+  const { rows } = await db.query('SELECT * FROM clients WHERE id = $1', [id]);
+  return toClient(rows[0]);
 }
 
-function get(id) {
-  return byId.get(id) || null;
+async function getByPageId(pageId) {
+  if (!pageId) return null;
+  const { rows } = await db.query('SELECT * FROM clients WHERE page_id = $1', [pageId]);
+  return toClient(rows[0]);
 }
 
-function getByPageId(pageId) {
-  return byPageId.get(pageId) || null;
+async function getByIgUserId(igUserId) {
+  if (!igUserId) return null;
+  const { rows } = await db.query('SELECT * FROM clients WHERE ig_user_id = $1', [igUserId]);
+  return toClient(rows[0]);
 }
 
-function getByIgUserId(igUserId) {
-  return byIgUserId.get(igUserId) || null;
-}
-
-function slugify(name) {
+async function slugify(name) {
   const base = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'client';
   let id = base;
   let n = 2;
-  while (byId.has(id)) {
+  while (await get(id)) {
     id = `${base}-${n++}`;
   }
   return id;
@@ -68,56 +51,67 @@ function slugify(name) {
  * moderates at least a Facebook Page); igUserId/igAccessToken are
  * optional, for clients who also want Instagram comments moderated.
  */
-function create({ name, pageId, pageAccessToken, igUserId, igAccessToken }) {
+async function create({ name, pageId, pageAccessToken, igUserId, igAccessToken }) {
   if (!name || !pageId || !pageAccessToken) {
     throw new Error('name, pageId, and pageAccessToken are required');
   }
-  if (getByPageId(pageId)) {
+  if (await getByPageId(pageId)) {
     throw new Error(`A client already uses Page ID ${pageId}`);
   }
-  if (igUserId && getByIgUserId(igUserId)) {
+  if (igUserId && (await getByIgUserId(igUserId))) {
     throw new Error(`A client already uses Instagram account ID ${igUserId}`);
   }
 
-  const client = {
-    id: slugify(name),
-    name,
-    pageId,
-    pageAccessToken,
-    igUserId: igUserId || null,
-    igAccessToken: igAccessToken || null,
-    active: true,
-    createdAt: new Date().toISOString(),
-  };
-  clients.push(client);
-  reindex();
-  persist();
-  return client;
+  const id = await slugify(name);
+  const { rows } = await db.query(
+    `INSERT INTO clients (id, name, page_id, page_access_token, ig_user_id, ig_access_token)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [id, name, pageId, pageAccessToken, igUserId || null, igAccessToken || null]
+  );
+  return toClient(rows[0]);
 }
 
-function update(id, fields) {
-  const client = byId.get(id);
-  if (!client) return null;
+const UPDATABLE_FIELDS = {
+  name: 'name',
+  pageId: 'page_id',
+  pageAccessToken: 'page_access_token',
+  igUserId: 'ig_user_id',
+  igAccessToken: 'ig_access_token',
+  active: 'active',
+};
 
-  if (fields.pageId && fields.pageId !== client.pageId && getByPageId(fields.pageId)) {
+async function update(id, fields) {
+  const existing = await get(id);
+  if (!existing) return null;
+
+  if (fields.pageId && fields.pageId !== existing.pageId && (await getByPageId(fields.pageId))) {
     throw new Error(`A client already uses Page ID ${fields.pageId}`);
   }
-  if (fields.igUserId && fields.igUserId !== client.igUserId && getByIgUserId(fields.igUserId)) {
+  if (fields.igUserId && fields.igUserId !== existing.igUserId && (await getByIgUserId(fields.igUserId))) {
     throw new Error(`A client already uses Instagram account ID ${fields.igUserId}`);
   }
 
-  Object.assign(client, fields);
-  reindex();
-  persist();
-  return client;
+  const sets = [];
+  const values = [];
+  for (const [key, column] of Object.entries(UPDATABLE_FIELDS)) {
+    if (Object.prototype.hasOwnProperty.call(fields, key)) {
+      values.push(fields[key]);
+      sets.push(`${column} = $${values.length}`);
+    }
+  }
+  if (sets.length === 0) return existing;
+
+  values.push(id);
+  const { rows } = await db.query(
+    `UPDATE clients SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING *`,
+    values
+  );
+  return toClient(rows[0]);
 }
 
-function remove(id) {
-  const before = clients.length;
-  clients = clients.filter((c) => c.id !== id);
-  reindex();
-  if (clients.length !== before) persist();
-  return clients.length !== before;
+async function remove(id) {
+  const { rowCount } = await db.query('DELETE FROM clients WHERE id = $1', [id]);
+  return rowCount > 0;
 }
 
 module.exports = { list, get, getByPageId, getByIgUserId, create, update, remove };

@@ -1,40 +1,24 @@
-const fs = require('fs');
-const path = require('path');
+const db = require('../db');
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data');
-const FILE = path.join(DATA_DIR, 'blocklist.json');
-
-// Keyed by "clientId:platform:authorId" -- author IDs are only unique
-// within a platform, and now within a client too (two different clients
-// could each have their own troll with the same Instagram ID coincidence
-// is astronomically unlikely, but scoping by client keeps one client's
-// block list fully isolated from another's regardless).
-let blocked = new Map();
-
-function key(clientId, platform, authorId) {
-  return `${clientId}:${platform}:${authorId}`;
+function toBlocked(row) {
+  if (!row) return null;
+  return {
+    clientId: row.client_id,
+    platform: row.platform,
+    authorId: row.author_id,
+    authorName: row.author_name || null,
+    reason: row.reason || null,
+    blockedAt: row.blocked_at,
+  };
 }
 
-function loadFromDisk() {
-  if (!fs.existsSync(FILE)) return;
-  try {
-    const entries = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    blocked = new Map(entries.map((e) => [key(e.clientId, e.platform, e.authorId), e]));
-  } catch {
-    blocked = new Map();
-  }
-}
-loadFromDisk();
-
-function persist() {
-  fs.mkdir(DATA_DIR, { recursive: true }, () => {
-    fs.writeFile(FILE, JSON.stringify([...blocked.values()], null, 2), () => {});
-  });
-}
-
-function isBlocked(clientId, platform, authorId) {
+async function isBlocked(clientId, platform, authorId) {
   if (!authorId) return false;
-  return blocked.has(key(clientId, platform, authorId));
+  const { rows } = await db.query(
+    'SELECT 1 FROM blocklist WHERE client_id = $1 AND platform = $2 AND author_id = $3',
+    [clientId, platform, authorId]
+  );
+  return rows.length > 0;
 }
 
 /**
@@ -43,29 +27,31 @@ function isBlocked(clientId, platform, authorId) {
  * are deleted on sight. Re-blocking just refreshes the reason/comment
  * reference rather than erroring.
  */
-function block(clientId, platform, authorId, authorName, reason) {
+async function block(clientId, platform, authorId, authorName, reason) {
   if (!authorId) return;
-  blocked.set(key(clientId, platform, authorId), {
-    clientId,
-    platform,
-    authorId,
-    authorName: authorName || null,
-    reason: reason || null,
-    blockedAt: new Date().toISOString(),
-  });
-  persist();
+  await db.query(
+    `INSERT INTO blocklist (client_id, platform, author_id, author_name, reason)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (client_id, platform, author_id)
+     DO UPDATE SET author_name = EXCLUDED.author_name, reason = EXCLUDED.reason, blocked_at = now()`,
+    [clientId, platform, authorId, authorName || null, reason || null]
+  );
 }
 
-function unblock(clientId, platform, authorId) {
-  const existed = blocked.delete(key(clientId, platform, authorId));
-  if (existed) persist();
-  return existed;
+async function unblock(clientId, platform, authorId) {
+  const { rowCount } = await db.query(
+    'DELETE FROM blocklist WHERE client_id = $1 AND platform = $2 AND author_id = $3',
+    [clientId, platform, authorId]
+  );
+  return rowCount > 0;
 }
 
-function list(clientId) {
-  return [...blocked.values()]
-    .filter((b) => b.clientId === clientId)
-    .sort((a, b) => b.blockedAt.localeCompare(a.blockedAt));
+async function list(clientId) {
+  const { rows } = await db.query(
+    'SELECT * FROM blocklist WHERE client_id = $1 ORDER BY blocked_at DESC',
+    [clientId]
+  );
+  return rows.map(toBlocked);
 }
 
 module.exports = { isBlocked, block, unblock, list };

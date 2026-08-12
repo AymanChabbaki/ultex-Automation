@@ -90,7 +90,7 @@ async function processEntries(entries, object) {
     // the Instagram Business Account ID for "instagram" object payloads
     // -- that's how a shared app-level webhook endpoint knows which
     // onboarded client this event belongs to.
-    const client = object === 'instagram' ? clients.getByIgUserId(entry.id) : clients.getByPageId(entry.id);
+    const client = object === 'instagram' ? await clients.getByIgUserId(entry.id) : await clients.getByPageId(entry.id);
     if (!client || !client.active) continue;
 
     for (const change of entry.changes || []) {
@@ -118,23 +118,23 @@ async function processEntries(entries, object) {
       // A previously-deleted author's comments get removed on sight,
       // skipping the OpenAI call entirely -- both faster and cheaper
       // than re-evaluating someone who's already shown they post junk.
-      const isRepeatOffender = blocklist.isBlocked(client.id, platform, authorId);
+      const isRepeatOffender = await blocklist.isBlocked(client.id, platform, authorId);
 
       try {
         const verdict = isRepeatOffender ? 'DELETE' : (await shouldDelete(text)) ? 'DELETE' : 'KEEP';
         const deleteResult = verdict === 'DELETE' ? await deleteComment(commentId, platform, token) : { ok: false };
         console.log(`[${client.id}] Comment ${commentId}: ${verdict}${isRepeatOffender ? ' (blocklisted author, skipped AI check)' : ''}`);
-        eventLog.record(client.id, {
+        await eventLog.record(client.id, {
           commentId, text, verdict, deleted: deleteResult.ok, platform,
           author: authorName, authorId, autoBlocked: isRepeatOffender,
         });
 
         if (verdict === 'DELETE' && !isRepeatOffender) {
-          blocklist.block(client.id, platform, authorId, authorName, commentId);
+          await blocklist.block(client.id, platform, authorId, authorName, commentId);
         }
       } catch (err) {
         console.error(`[${client.id}] Error moderating comment ${commentId}:`, err.message);
-        eventLog.record(client.id, { commentId, text, verdict: null, deleted: false, error: err.message, platform, author: authorName, authorId });
+        await eventLog.record(client.id, { commentId, text, verdict: null, deleted: false, error: err.message, platform, author: authorName, authorId });
       }
     }
   }

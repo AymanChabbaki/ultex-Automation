@@ -5,10 +5,11 @@ const clients = require('../services/clients');
 const router = express.Router();
 router.use(basicAuth);
 
-router.get('/admin/api/clients', (_req, res) => {
+router.get('/admin/api/clients', async (_req, res) => {
   // Never send raw tokens back to the browser -- the admin screen only
   // needs to know a token is set, not its value, once it's been saved.
-  const safe = clients.list().map(({ pageAccessToken, igAccessToken, ...rest }) => ({
+  const list = await clients.list();
+  const safe = list.map(({ pageAccessToken, igAccessToken, ...rest }) => ({
     ...rest,
     hasPageToken: !!pageAccessToken,
     hasIgToken: !!igAccessToken,
@@ -16,18 +17,18 @@ router.get('/admin/api/clients', (_req, res) => {
   res.json({ clients: safe });
 });
 
-router.post('/admin/api/clients', (req, res) => {
+router.post('/admin/api/clients', async (req, res) => {
   try {
-    const client = clients.create(req.body || {});
+    const client = await clients.create(req.body || {});
     res.json({ success: true, client });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }
 });
 
-router.patch('/admin/api/clients/:id', (req, res) => {
+router.patch('/admin/api/clients/:id', async (req, res) => {
   try {
-    const client = clients.update(req.params.id, req.body || {});
+    const client = await clients.update(req.params.id, req.body || {});
     if (!client) return res.status(404).json({ success: false, error: 'Unknown client' });
     res.json({ success: true, client });
   } catch (err) {
@@ -35,8 +36,8 @@ router.patch('/admin/api/clients/:id', (req, res) => {
   }
 });
 
-router.delete('/admin/api/clients/:id', (req, res) => {
-  const existed = clients.remove(req.params.id);
+router.delete('/admin/api/clients/:id', async (req, res) => {
+  const existed = await clients.remove(req.params.id);
   res.json({ success: existed });
 });
 
