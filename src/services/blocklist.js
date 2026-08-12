@@ -4,20 +4,22 @@ const path = require('path');
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const FILE = path.join(DATA_DIR, 'blocklist.json');
 
-// Keyed by "platform:authorId" -- author IDs are platform-specific
-// namespaces (a Facebook user ID and an Instagram user ID are unrelated
-// even for the same person), so blocking is scoped per platform.
+// Keyed by "clientId:platform:authorId" -- author IDs are only unique
+// within a platform, and now within a client too (two different clients
+// could each have their own troll with the same Instagram ID coincidence
+// is astronomically unlikely, but scoping by client keeps one client's
+// block list fully isolated from another's regardless).
 let blocked = new Map();
 
-function key(platform, authorId) {
-  return `${platform}:${authorId}`;
+function key(clientId, platform, authorId) {
+  return `${clientId}:${platform}:${authorId}`;
 }
 
 function loadFromDisk() {
   if (!fs.existsSync(FILE)) return;
   try {
     const entries = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    blocked = new Map(entries.map((e) => [key(e.platform, e.authorId), e]));
+    blocked = new Map(entries.map((e) => [key(e.clientId, e.platform, e.authorId), e]));
   } catch {
     blocked = new Map();
   }
@@ -30,9 +32,9 @@ function persist() {
   });
 }
 
-function isBlocked(platform, authorId) {
+function isBlocked(clientId, platform, authorId) {
   if (!authorId) return false;
-  return blocked.has(key(platform, authorId));
+  return blocked.has(key(clientId, platform, authorId));
 }
 
 /**
@@ -41,9 +43,10 @@ function isBlocked(platform, authorId) {
  * are deleted on sight. Re-blocking just refreshes the reason/comment
  * reference rather than erroring.
  */
-function block(platform, authorId, authorName, reason) {
+function block(clientId, platform, authorId, authorName, reason) {
   if (!authorId) return;
-  blocked.set(key(platform, authorId), {
+  blocked.set(key(clientId, platform, authorId), {
+    clientId,
     platform,
     authorId,
     authorName: authorName || null,
@@ -53,14 +56,16 @@ function block(platform, authorId, authorName, reason) {
   persist();
 }
 
-function unblock(platform, authorId) {
-  const existed = blocked.delete(key(platform, authorId));
+function unblock(clientId, platform, authorId) {
+  const existed = blocked.delete(key(clientId, platform, authorId));
   if (existed) persist();
   return existed;
 }
 
-function list() {
-  return [...blocked.values()].sort((a, b) => b.blockedAt.localeCompare(a.blockedAt));
+function list(clientId) {
+  return [...blocked.values()]
+    .filter((b) => b.clientId === clientId)
+    .sort((a, b) => b.blockedAt.localeCompare(a.blockedAt));
 }
 
 module.exports = { isBlocked, block, unblock, list };

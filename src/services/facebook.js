@@ -1,21 +1,18 @@
 const axios = require('axios');
 
 /**
- * Instagram comments delivered via the separate "Instagram API with
- * Instagram Login" product belong to a different app identity than the
- * Page -- PAGE_ACCESS_TOKEN has no permission over them. Those need
- * IG_ACCESS_TOKEN (generated in that product's own setup screen) against
- * graph.instagram.com, the documented base URL for that token type.
- * Falls back to the classic Page-linked path (PAGE_ACCESS_TOKEN against
- * graph.facebook.com) if IG_ACCESS_TOKEN isn't set, for setups using the
- * classic flow instead.
+ * Instagram comments delivered via the "Instagram API with Instagram
+ * Login" product go through graph.instagram.com (the documented base
+ * URL for that token type); Facebook Page comments go through
+ * graph.facebook.com. The token itself is always passed in by the
+ * caller -- each client (see services/clients.js) has their own Page/IG
+ * tokens, so this module has no notion of a single global credential.
  */
-function targetFor(platform) {
+function baseUrlFor(platform) {
   const version = process.env.GRAPH_API_VERSION || 'v19.0';
-  if (platform === 'instagram' && process.env.IG_ACCESS_TOKEN) {
-    return { base: `https://graph.instagram.com/${version}`, token: process.env.IG_ACCESS_TOKEN };
-  }
-  return { base: `https://graph.facebook.com/${version}`, token: process.env.PAGE_ACCESS_TOKEN };
+  return platform === 'instagram'
+    ? `https://graph.instagram.com/${version}`
+    : `https://graph.facebook.com/${version}`;
 }
 
 /**
@@ -28,9 +25,8 @@ function targetFor(platform) {
  * Returns null if the comment is unavailable (e.g. already deleted by
  * the author before this call runs).
  */
-async function getCommentText(commentId, platform) {
-  const { base, token } = targetFor(platform);
-  const url = `${base}/${commentId}`;
+async function getCommentText(commentId, platform, token) {
+  const url = `${baseUrlFor(platform)}/${commentId}`;
 
   try {
     const response = await axios.get(url, {
@@ -53,9 +49,8 @@ async function getCommentText(commentId, platform) {
  * the dashboard) can log and move on, or show the specific failure
  * reason to a human, instead of the whole batch/request failing.
  */
-async function deleteComment(commentId, platform) {
-  const { base, token } = targetFor(platform);
-  const url = `${base}/${commentId}`;
+async function deleteComment(commentId, platform, token) {
+  const url = `${baseUrlFor(platform)}/${commentId}`;
 
   try {
     await axios.delete(url, {

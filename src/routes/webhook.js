@@ -4,12 +4,14 @@ const { shouldDelete } = require('../services/moderation');
 const { getCommentText, deleteComment } = require('../services/facebook');
 const eventLog = require('../services/eventLog');
 const blocklist = require('../services/blocklist');
+const clients = require('../services/clients');
 
 const router = express.Router();
 
 // Meta retries webhook deliveries; a bounded recent-IDs cache keeps a
 // retried delivery (or an "edited" event for the same comment) from
-// being run through moderation twice.
+// being run through moderation twice. Shared across clients since
+// comment IDs are already globally unique per platform.
 const MAX_SEEN = 5000;
 const seenCommentIds = new Set();
 function alreadyProcessed(id) {
@@ -43,14 +45,15 @@ router.post('/', verifySignature, (req, res) => {
   if (process.env.DEBUG_WEBHOOK_PAYLOAD === 'true') {
     console.log('Webhook payload:', JSON.stringify(req.body));
   }
-  processEntries(req.body?.entry || []).catch((err) =>
+  processEntries(req.body?.entry || [], req.body?.object).catch((err) =>
     console.error('Error processing webhook payload:', err)
   );
 });
 
-// Pulls {commentId, authorId} out of a change, for either a Facebook Page
-// comment (field "feed") or an Instagram comment (field "comments").
-// Returns null if this change isn't a new comment we should act on.
+// Pulls {commentId, authorId, ...} out of a change, for either a
+// Facebook Page comment (field "feed") or an Instagram comment (field
+// "comments"). Returns null if this change isn't a new comment we
+// should act on.
 function extractComment(change) {
   const value = change.value || {};
 
@@ -81,8 +84,15 @@ function extractComment(change) {
   return null;
 }
 
-async function processEntries(entries) {
+async function processEntries(entries, object) {
   for (const entry of entries) {
+    // entry.id is the Facebook Page ID for "page" object payloads, or
+    // the Instagram Business Account ID for "instagram" object payloads
+    // -- that's how a shared app-level webhook endpoint knows which
+    // onboarded client this event belongs to.
+    const client = object === 'instagram' ? clients.getByIgUserId(entry.id) : clients.getByPageId(entry.id);
+    if (!client || !client.active) continue;
+
     for (const change of entry.changes || []) {
       const comment = extractComment(change);
       if (!comment) continue;
@@ -92,37 +102,39 @@ async function processEntries(entries) {
 
       // Skip the Page/IG account's own comments/replies so the bot
       // never evaluates or deletes its own activity.
-      if (authorId && (authorId === process.env.PAGE_ID || authorId === process.env.IG_USER_ID)) {
+      if (authorId && (authorId === client.pageId || authorId === client.igUserId)) {
         continue;
       }
 
       if (alreadyProcessed(commentId)) continue;
 
+      const token = platform === 'instagram' ? client.igAccessToken : client.pageAccessToken;
+
       // Neither platform's webhook payload reliably includes the comment
       // text inline on current Graph API versions, so fetch it if missing.
-      const text = typeof inlineText === 'string' ? inlineText : await getCommentText(commentId, platform);
+      const text = typeof inlineText === 'string' ? inlineText : await getCommentText(commentId, platform, token);
       if (typeof text !== 'string') continue;
 
       // A previously-deleted author's comments get removed on sight,
       // skipping the OpenAI call entirely -- both faster and cheaper
       // than re-evaluating someone who's already shown they post junk.
-      const isRepeatOffender = blocklist.isBlocked(platform, authorId);
+      const isRepeatOffender = blocklist.isBlocked(client.id, platform, authorId);
 
       try {
         const verdict = isRepeatOffender ? 'DELETE' : (await shouldDelete(text)) ? 'DELETE' : 'KEEP';
-        const deleteResult = verdict === 'DELETE' ? await deleteComment(commentId, platform) : { ok: false };
-        console.log(`Comment ${commentId}: ${verdict}${isRepeatOffender ? ' (blocklisted author, skipped AI check)' : ''}`);
-        eventLog.record({
+        const deleteResult = verdict === 'DELETE' ? await deleteComment(commentId, platform, token) : { ok: false };
+        console.log(`[${client.id}] Comment ${commentId}: ${verdict}${isRepeatOffender ? ' (blocklisted author, skipped AI check)' : ''}`);
+        eventLog.record(client.id, {
           commentId, text, verdict, deleted: deleteResult.ok, platform,
           author: authorName, authorId, autoBlocked: isRepeatOffender,
         });
 
         if (verdict === 'DELETE' && !isRepeatOffender) {
-          blocklist.block(platform, authorId, authorName, commentId);
+          blocklist.block(client.id, platform, authorId, authorName, commentId);
         }
       } catch (err) {
-        console.error(`Error moderating comment ${commentId}:`, err.message);
-        eventLog.record({ commentId, text, verdict: null, deleted: false, error: err.message, platform, author: authorName, authorId });
+        console.error(`[${client.id}] Error moderating comment ${commentId}:`, err.message);
+        eventLog.record(client.id, { commentId, text, verdict: null, deleted: false, error: err.message, platform, author: authorName, authorId });
       }
     }
   }

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "client-a2",
+    "name": "Client A2",
+    "pageId": "1000001",
+    "pageAccessToken": "whatever",
+    "igUserId": null,
+    "igAccessToken": null,
+    "active": true,
+    "createdAt": "2026-08-12T09:39:22.765Z"
+  }
+]

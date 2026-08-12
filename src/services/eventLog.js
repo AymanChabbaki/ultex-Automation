@@ -3,7 +3,9 @@ const path = require('path');
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const LOG_FILE = path.join(DATA_DIR, 'events.jsonl');
-const MAX_IN_MEMORY = 1000;
+// Shared across every client now, so this needs enough headroom that
+// one busy client doesn't push another's recent history out of memory.
+const MAX_IN_MEMORY = 5000;
 
 let events = [];
 
@@ -24,12 +26,12 @@ function loadFromDisk() {
 loadFromDisk();
 
 /**
- * Records one moderation decision. Fire-and-forget disk append so a
- * slow/full disk never blocks webhook processing; in-memory copy is
- * what the dashboard actually reads from.
+ * Records one moderation decision for a given client. Fire-and-forget
+ * disk append so a slow/full disk never blocks webhook processing;
+ * in-memory copy is what the dashboard actually reads from.
  */
-function record(event) {
-  const entry = { timestamp: new Date().toISOString(), ...event };
+function record(clientId, event) {
+  const entry = { clientId, timestamp: new Date().toISOString(), ...event };
 
   events.push(entry);
   if (events.length > MAX_IN_MEMORY) events.shift();
@@ -39,13 +41,16 @@ function record(event) {
   });
 }
 
-function list(limit = 100) {
-  return events.slice(-limit).reverse();
+function list(clientId, limit = 100) {
+  return events
+    .filter((e) => e.clientId === clientId)
+    .slice(-limit)
+    .reverse();
 }
 
-function getByCommentId(commentId) {
+function getByCommentId(clientId, commentId) {
   for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].commentId === commentId) return events[i];
+    if (events[i].clientId === clientId && events[i].commentId === commentId) return events[i];
   }
   return null;
 }
@@ -58,8 +63,8 @@ function getByCommentId(commentId) {
  * events, but a manual correction is rare enough that a full rewrite
  * here is simpler and safer than trying to patch one line in place.
  */
-function markDeleted(commentId) {
-  const entry = getByCommentId(commentId);
+function markDeleted(clientId, commentId) {
+  const entry = getByCommentId(clientId, commentId);
   if (!entry) return null;
 
   entry.deleted = true;
@@ -75,13 +80,14 @@ function markDeleted(commentId) {
   return entry;
 }
 
-function stats() {
-  const total = events.length;
-  const deleted = events.filter((e) => e.deleted).length;
-  const kept = events.filter((e) => e.verdict === 'KEEP').length;
-  const errors = events.filter((e) => e.error).length;
-  const facebook = events.filter((e) => e.platform === 'facebook').length;
-  const instagram = events.filter((e) => e.platform === 'instagram').length;
+function stats(clientId) {
+  const scoped = events.filter((e) => e.clientId === clientId);
+  const total = scoped.length;
+  const deleted = scoped.filter((e) => e.deleted).length;
+  const kept = scoped.filter((e) => e.verdict === 'KEEP').length;
+  const errors = scoped.filter((e) => e.error).length;
+  const facebook = scoped.filter((e) => e.platform === 'facebook').length;
+  const instagram = scoped.filter((e) => e.platform === 'instagram').length;
   return { total, deleted, kept, errors, facebook, instagram };
 }
 

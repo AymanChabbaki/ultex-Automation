@@ -2,14 +2,25 @@ const express = require('express');
 const { basicAuth } = require('../middleware/basicAuth');
 const eventLog = require('../services/eventLog');
 const blocklist = require('../services/blocklist');
+const clients = require('../services/clients');
 const { deleteComment } = require('../services/facebook');
 
 const router = express.Router();
 router.use(basicAuth);
 
-router.get('/api/events', (req, res) => {
+// Every route here is scoped to one client -- loads it once per request
+// and 404s up front for an unknown ID, rather than every handler
+// re-checking.
+router.param('clientId', (req, res, next, clientId) => {
+  const client = clients.get(clientId);
+  if (!client) return res.status(404).send('Unknown client');
+  req.client = client;
+  next();
+});
+
+router.get('/clients/:clientId/api/events', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 300, 1000);
-  res.json({ stats: eventLog.stats(), events: eventLog.list(limit) });
+  res.json({ stats: eventLog.stats(req.client.id), events: eventLog.list(req.client.id, limit) });
 });
 
 // Manual delete, for when the moderation model missed a comment it
@@ -17,9 +28,10 @@ router.get('/api/events', (req, res) => {
 // triggered by a human from the dashboard instead of a webhook event.
 // Also blocklists the author, same as an AI-caught delete, so a human
 // catching what the model missed still prevents their next comment.
-router.post('/api/events/:commentId/delete', async (req, res) => {
+router.post('/clients/:clientId/api/events/:commentId/delete', async (req, res) => {
+  const client = req.client;
   const { commentId } = req.params;
-  const entry = eventLog.getByCommentId(commentId);
+  const entry = eventLog.getByCommentId(client.id, commentId);
 
   if (!entry) {
     return res.status(404).json({ success: false, error: 'Unknown comment ID' });
@@ -28,33 +40,34 @@ router.post('/api/events/:commentId/delete', async (req, res) => {
     return res.json({ success: true, event: entry });
   }
 
-  const result = await deleteComment(commentId, entry.platform);
+  const token = entry.platform === 'instagram' ? client.igAccessToken : client.pageAccessToken;
+  const result = await deleteComment(commentId, entry.platform, token);
   if (!result.ok) {
     return res.status(502).json({ success: false, error: result.error });
   }
 
-  const updated = eventLog.markDeleted(commentId);
+  const updated = eventLog.markDeleted(client.id, commentId);
   if (entry.authorId) {
-    blocklist.block(entry.platform, entry.authorId, entry.author, commentId);
+    blocklist.block(client.id, entry.platform, entry.authorId, entry.author, commentId);
   }
   res.json({ success: true, event: updated });
 });
 
-router.get('/api/blocklist', (_req, res) => {
-  res.json({ blocked: blocklist.list() });
+router.get('/clients/:clientId/api/blocklist', (req, res) => {
+  res.json({ blocked: blocklist.list(req.client.id) });
 });
 
-router.post('/api/blocklist/unblock', (req, res) => {
+router.post('/clients/:clientId/api/blocklist/unblock', (req, res) => {
   const { platform, authorId } = req.body || {};
   if (!platform || !authorId) {
     return res.status(400).json({ success: false, error: 'platform and authorId are required' });
   }
-  const existed = blocklist.unblock(platform, authorId);
+  const existed = blocklist.unblock(req.client.id, platform, authorId);
   res.json({ success: existed });
 });
 
-router.get('/dashboard', (_req, res) => {
-  res.type('html').send(DASHBOARD_HTML);
+router.get('/clients/:clientId/dashboard', (req, res) => {
+  res.type('html').send(DASHBOARD_HTML.replace(/\{\{CLIENT_NAME\}\}/g, req.client.name));
 });
 
 const DASHBOARD_HTML = `<!doctype html>
@@ -62,7 +75,7 @@ const DASHBOARD_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Comment Moderation Dashboard</title>
+<title>{{CLIENT_NAME}} &ndash; Comment Moderation</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -291,7 +304,7 @@ const DASHBOARD_HTML = `<!doctype html>
 </head>
 <body>
   <header>
-    <h1>Comment Moderation<span class="sub">Facebook &amp; Instagram</span></h1>
+    <h1>{{CLIENT_NAME}}<span class="sub">Comment Moderation &middot; Facebook &amp; Instagram</span></h1>
     <span class="live"><span class="dot"></span><span id="updated">Loading&hellip;</span></span>
   </header>
 
