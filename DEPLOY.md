@@ -1,5 +1,11 @@
 # Deploying to workflow.ultex.ma
 
+> **On the `Saas` branch, this file is stale.** It describes the old
+> single-tenant, file-storage, VPS/Docker setup. The multi-tenant version
+> on this branch is deployed differently -- see `DEPLOY_SAAS.md` instead
+> (Vercel + Neon Postgres, comments.techermanos.org). This file still
+> applies to `main`, which hasn't changed.
+
 Runs as its own standalone container (not part of the `ultex_workflow`
 compose stack), reachable through the existing `nginx-proxy` container at
 `https://workflow.ultex.ma/fb-webhook/`. This mirrors how `folders.ultex.ma`
