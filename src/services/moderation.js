@@ -17,8 +17,14 @@ const SYSTEM_PROMPT =
   'harassment, spam, a scam, or otherwise toxic, OR if it expresses any ' +
   'negative sentiment at all about the page, business, or its products -- ' +
   'including mild criticism, complaints, disappointment, or saying you do ' +
-  'not recommend it. Keep it only if it is neutral or positive. Respond ' +
-  'with exactly one word: DELETE or KEEP. Do not explain your reasoning.';
+  'not recommend it. Also delete sarcastic or mocking comments -- praise, ' +
+  '"compliments", emojis, or approval that is clearly meant ironically or ' +
+  'to make fun of the page rather than sincerely, even if the literal words ' +
+  'sound positive. Also delete low-effort test/junk comments that carry no ' +
+  'real meaning (e.g. "test", "testing", "123", random keyboard mashing, a ' +
+  'single punctuation mark or emoji with no message). Keep it only if it is ' +
+  'genuinely neutral or sincerely positive. Respond with exactly one word: ' +
+  'DELETE or KEEP. Do not explain your reasoning.';
 
 /**
  * Returns true if the comment should be deleted.
