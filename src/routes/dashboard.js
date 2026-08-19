@@ -65,64 +65,137 @@ const DASHBOARD_HTML = `<!doctype html>
 <title>Comment Moderation Dashboard</title>
 <style>
   :root {
-    color-scheme: light dark;
-    --bg: #0b0d12;
-    --panel: #151822;
-    --panel-2: #1b1f2b;
-    --border: #262b38;
-    --text: #eceef2;
-    --muted: #8b93a3;
-    --accent: #5b8def;
-    --delete: #f0555b;
-    --keep: #34b874;
-    --error: #f0a83b;
-    --fb: #5b8def;
-    --ig: #d65cc9;
-    --radius: 10px;
+    color-scheme: light;
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #f9fafb;
+    --border: #e5e7eb;
+    --text: #1a1d23;
+    --muted: #6b7280;
+    --muted-2: #9ca3af;
+    --accent: #4f6bed;
+    --accent-soft: rgba(79,107,237,0.1);
+    --delete: #e5484d;
+    --delete-soft: rgba(229,72,77,0.1);
+    --keep: #12b76a;
+    --keep-soft: rgba(18,183,106,0.1);
+    --error: #f59e0b;
+    --error-soft: rgba(245,158,11,0.12);
+    --fb: #1877f2;
+    --ig: #d6249f;
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.06);
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
-    padding: 28px 32px 60px;
+    -webkit-font-smoothing: antialiased;
   }
-  header {
+
+  .app { display: flex; min-height: 100vh; align-items: stretch; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 22px;
+    flex-direction: column;
+    padding: 20px 14px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
   }
-  h1 { font-size: 19px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
-  h1 span.sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 10px; }
-  .live {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--muted);
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 24px; }
+  .brand-mark {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), #8b9cf1);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px; letter-spacing: -0.02em; flex-shrink: 0;
   }
+  .brand-name { font-weight: 650; font-size: 14px; line-height: 1.3; }
+  .brand-sub { font-size: 11px; color: var(--muted); }
+
+  .nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  .nav-link {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 8px;
+    color: var(--muted); text-decoration: none;
+    font-size: 13.5px; font-weight: 500;
+  }
+  .nav-link svg { width: 17px; height: 17px; flex-shrink: 0; }
+  .nav-link:hover { background: var(--surface-2); color: var(--text); }
+  .nav-link.active { background: var(--accent-soft); color: var(--accent); }
+  .nav-badge {
+    margin-left: auto; background: var(--delete-soft); color: var(--delete);
+    font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  }
+
+  .sidebar-footer {
+    border-top: 1px solid var(--border);
+    padding-top: 14px; margin-top: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); padding: 0 8px; }
   .live .dot {
     width: 7px; height: 7px; border-radius: 50%;
     background: var(--keep);
-    box-shadow: 0 0 0 0 rgba(52,184,116,0.5);
+    box-shadow: 0 0 0 0 rgba(18,183,106,0.5);
     animation: pulse 2s infinite;
   }
   @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(52,184,116,0.45); }
-    70% { box-shadow: 0 0 0 6px rgba(52,184,116,0); }
-    100% { box-shadow: 0 0 0 0 rgba(52,184,116,0); }
+    0% { box-shadow: 0 0 0 0 rgba(18,183,106,0.45); }
+    70% { box-shadow: 0 0 0 6px rgba(18,183,106,0); }
+    100% { box-shadow: 0 0 0 0 rgba(18,183,106,0); }
   }
+  #refreshBtn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    width: 100%;
+  }
+  #refreshBtn:hover { border-color: var(--accent); color: var(--accent); }
 
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px; }
-  .stat {
-    background: var(--panel);
+  /* Content */
+  .content { flex: 1; min-width: 0; padding: 28px 34px 60px; max-width: 1320px; }
+  .page-header { margin-bottom: 22px; }
+  .page-header h1 { margin: 0 0 4px; font-size: 21px; font-weight: 650; letter-spacing: -0.01em; }
+  .page-header p { margin: 0; color: var(--muted); font-size: 13px; }
+
+  .card {
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 650;
+    margin-bottom: 14px;
+  }
+  .card-title .hint { text-transform: none; font-weight: 400; letter-spacing: 0; float: right; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 15px 17px;
   }
   .stat .value { font-size: 24px; font-weight: 700; line-height: 1.2; }
   .stat .label { font-size: 12px; color: var(--muted); margin-top: 3px; }
@@ -130,65 +203,88 @@ const DASHBOARD_HTML = `<!doctype html>
   .stat.accent-keep .value { color: var(--keep); }
   .stat.accent-error .value { color: var(--error); }
 
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px 18px;
-    margin-bottom: 20px;
-  }
-  .panel-title {
-    font-size: 12px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 12px;
-  }
-  #chart { width: 100%; height: 90px; display: block; overflow: visible; }
+  .grid-2 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; align-items: stretch; }
+  .grid-2 .card { margin-bottom: 0; }
+
+  #chart { width: 100%; height: 110px; display: block; overflow: visible; }
   #chart rect { transition: opacity 0.1s; }
   #chart rect:hover { opacity: 0.75; }
-  .chart-legend { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .chart-legend { display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--muted); }
   .chart-legend .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+
+  .donut-wrap { position: relative; width: 148px; height: 148px; margin: 4px auto 0; }
+  .donut-wrap svg { width: 100%; height: 100%; }
+  .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .donut-center .num { font-size: 22px; font-weight: 700; line-height: 1; }
+  .donut-center .lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  .legend-list { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; font-size: 12.5px; }
+  .legend-list .row { display: flex; align-items: center; }
+  .legend-list .sw { width: 9px; height: 9px; border-radius: 3px; display: inline-block; margin-right: 8px; flex-shrink: 0; }
+  .legend-list .row .lbl { color: var(--muted); }
+  .legend-list .row .val { margin-left: auto; font-weight: 650; }
+
+  .platform-bar-track {
+    display: flex; height: 10px; border-radius: 999px; overflow: hidden;
+    background: var(--surface-2); border: 1px solid var(--border);
+  }
+  .platform-bar-track .fb { background: var(--fb); }
+  .platform-bar-track .ig { background: var(--ig); }
+  .platform-stats { display: flex; justify-content: space-between; margin-top: 14px; }
+  .platform-stat { text-align: left; }
+  .platform-stat .num { font-size: 19px; font-weight: 700; }
+  .platform-stat .lbl { font-size: 11.5px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+  .platform-stat .lbl .sw { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  .platform-stat.ig-stat { text-align: right; }
+  .platform-stat.ig-stat .lbl { justify-content: flex-end; }
+
+  .mini-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .mini-table th, .mini-table td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--border); }
+  .mini-table tbody tr:last-child td { border-bottom: none; }
+  .mini-table th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .mini-table td.text { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .view-all { display: inline-block; margin-top: 12px; font-size: 12.5px; color: var(--accent); text-decoration: none; font-weight: 600; }
+  .view-all:hover { text-decoration: underline; }
 
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
   .toolbar select, .toolbar input {
-    background: var(--panel-2);
+    background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text);
-    border-radius: 7px;
-    padding: 7px 10px;
+    border-radius: 8px;
+    padding: 8px 10px;
     font-size: 13px;
     font-family: inherit;
   }
   .toolbar input[type="search"] { flex: 1; min-width: 160px; }
   .toolbar button {
-    background: var(--panel-2);
+    background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text);
-    border-radius: 7px;
-    padding: 7px 12px;
+    border-radius: 8px;
+    padding: 8px 12px;
     font-size: 13px;
     cursor: pointer;
   }
-  .toolbar button:hover { border-color: var(--accent); }
+  .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
   .count-hint { color: var(--muted); font-size: 12px; margin-left: auto; }
 
   .presets { display: flex; gap: 4px; }
   .presets button {
-    background: var(--panel-2);
+    background: var(--surface);
     border: 1px solid var(--border);
     color: var(--muted);
-    border-radius: 7px;
-    padding: 6px 10px;
+    border-radius: 8px;
+    padding: 7px 11px;
     font-size: 12px;
     cursor: pointer;
   }
-  .presets button:hover { border-color: var(--accent); color: var(--text); }
-  .presets button.active { border-color: var(--accent); color: var(--text); background: rgba(91,141,239,0.12); }
+  .presets button:hover { border-color: var(--accent); color: var(--accent); }
+  .presets button.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
   .date-sep { color: var(--muted); font-size: 12px; }
 
   .delete-btn {
-    background: transparent;
+    background: var(--surface);
     border: 1px solid var(--delete);
     color: var(--delete);
     border-radius: 6px;
@@ -197,12 +293,12 @@ const DASHBOARD_HTML = `<!doctype html>
     font-weight: 600;
     cursor: pointer;
   }
-  .delete-btn:hover { background: rgba(240,85,91,0.12); }
+  .delete-btn:hover { background: var(--delete-soft); }
   .delete-btn:disabled { opacity: 0.5; cursor: default; }
   .manual-tag { color: var(--muted); font-size: 11px; font-weight: 400; }
 
-  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 720px; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
   th, td {
     text-align: left;
     padding: 10px 12px;
@@ -210,14 +306,14 @@ const DASHBOARD_HTML = `<!doctype html>
     vertical-align: top;
   }
   tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover { background: var(--panel-2); }
-  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; background: var(--panel); }
+  tbody tr:hover { background: var(--surface-2); }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; background: var(--surface-2); }
   td.time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.author { white-space: nowrap; color: var(--muted); }
   td.text { max-width: 420px; }
   td.text .full { white-space: pre-wrap; word-break: break-word; }
   td.text .err { color: var(--error); font-size: 12px; margin-top: 4px; }
-  td.post a { color: var(--accent); text-decoration: none; font-size: 12px; white-space: nowrap; }
+  td.post a { color: var(--accent); text-decoration: none; font-size: 12px; white-space: nowrap; font-weight: 600; }
   td.post a:hover { text-decoration: underline; }
 
   .platform-badge {
@@ -230,8 +326,8 @@ const DASHBOARD_HTML = `<!doctype html>
     font-weight: 600;
     white-space: nowrap;
   }
-  .platform-badge.facebook { background: rgba(91,141,239,0.15); color: var(--fb); }
-  .platform-badge.instagram { background: rgba(214,92,201,0.15); color: var(--ig); }
+  .platform-badge.facebook { background: rgba(24,119,242,0.1); color: var(--fb); }
+  .platform-badge.instagram { background: rgba(214,36,159,0.1); color: var(--ig); }
   .platform-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
   .badge {
@@ -242,9 +338,9 @@ const DASHBOARD_HTML = `<!doctype html>
     font-weight: 700;
     letter-spacing: 0.02em;
   }
-  .badge.DELETE { background: rgba(240,85,91,0.15); color: var(--delete); }
-  .badge.KEEP { background: rgba(52,184,116,0.15); color: var(--keep); }
-  .badge.ERROR { background: rgba(240,168,59,0.15); color: var(--error); }
+  .badge.DELETE { background: var(--delete-soft); color: var(--delete); }
+  .badge.KEEP { background: var(--keep-soft); color: var(--keep); }
+  .badge.ERROR { background: var(--error-soft); color: #b45309; }
 
   .deleted-yes { color: var(--delete); font-weight: 600; }
   .deleted-no { color: var(--muted); }
@@ -255,32 +351,20 @@ const DASHBOARD_HTML = `<!doctype html>
     border-radius: 999px;
     font-size: 10px;
     font-weight: 700;
-    background: rgba(240,85,91,0.1);
+    background: var(--delete-soft);
     color: var(--delete);
-    border: 1px solid rgba(240,85,91,0.3);
+    border: 1px solid rgba(229,72,77,0.25);
   }
 
   .muted { color: var(--muted); }
   .empty { color: var(--muted); padding: 50px 0; text-align: center; font-size: 13px; }
 
-  details.panel summary {
-    cursor: pointer;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  details.panel summary::-webkit-details-marker { display: none; }
-  details.panel summary .panel-title { margin-bottom: 0; }
-  details.panel[open] summary { margin-bottom: 12px; }
-  details.panel summary .chev { color: var(--muted); font-size: 12px; transition: transform 0.15s; }
-  details.panel[open] summary .chev { transform: rotate(90deg); }
   .blocklist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .blocklist-table td, .blocklist-table th { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: left; }
-  .blocklist-table th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  .blocklist-table td, .blocklist-table th { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+  .blocklist-table th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; background: var(--surface-2); }
   .blocklist-table tr:last-child td { border-bottom: none; }
   .unblock-btn {
-    background: transparent;
+    background: var(--surface);
     border: 1px solid var(--border);
     color: var(--muted);
     border-radius: 6px;
@@ -288,86 +372,176 @@ const DASHBOARD_HTML = `<!doctype html>
     font-size: 11px;
     cursor: pointer;
   }
-  .unblock-btn:hover { border-color: var(--accent); color: var(--text); }
+  .unblock-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .page[hidden] { display: none; }
+
+  @media (max-width: 900px) {
+    .app { flex-direction: column; }
+    .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; align-items: center; padding: 12px 16px; }
+    .brand { padding: 0; margin-right: 16px; }
+    .nav { flex-direction: row; }
+    .sidebar-footer { display: none; }
+    .content { padding: 20px; }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
-  <header>
-    <h1>Comment Moderation<span class="sub">Facebook &amp; Instagram</span></h1>
-    <span class="live"><span class="dot"></span><span id="updated">Loading&hellip;</span></span>
-  </header>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">CM</div>
+        <div>
+          <div class="brand-name">Moderation</div>
+          <div class="brand-sub">Facebook &amp; Instagram</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="#dashboard" class="nav-link" data-page="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>
+          Dashboard
+        </a>
+        <a href="#comments" class="nav-link" data-page="comments">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+          Comments
+        </a>
+        <a href="#blocklist" class="nav-link" data-page="blocklist">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="5.5" y1="5.5" x2="18.5" y2="18.5"></line></svg>
+          Blocklist
+          <span class="nav-badge" id="navBlockedCount" style="display:none">0</span>
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="live"><span class="dot"></span><span id="updated">Loading&hellip;</span></span>
+        <button id="refreshBtn" type="button">Refresh</button>
+      </div>
+    </aside>
 
-  <div class="stats" id="stats"></div>
+    <main class="content">
+      <section class="page" id="page-dashboard">
+        <div class="page-header">
+          <h1>Dashboard</h1>
+          <p>Overview of comment moderation activity</p>
+        </div>
 
-  <details class="panel" id="blocklistPanel">
-    <summary>
-      <span class="panel-title">Blocked authors (<span id="blockedCount">0</span>)</span>
-      <span class="chev">&#9656;</span>
-    </summary>
-    <table class="blocklist-table">
-      <thead>
-        <tr><th>Platform</th><th>Author</th><th>Blocked</th><th style="width:80px"></th></tr>
-      </thead>
-      <tbody id="blocklistRows"></tbody>
-    </table>
-    <div class="empty" id="blocklistEmpty" style="display:none; padding: 16px 0;">No blocked authors yet -- they're added automatically the first time one of their comments is deleted.</div>
-  </details>
+        <div class="stats" id="stats"></div>
 
-  <div class="panel">
-    <div class="panel-title">Activity, last 24h</div>
-    <svg id="chart" viewBox="0 0 960 90" preserveAspectRatio="none"></svg>
-    <div class="chart-legend">
-      <span><span class="sw" style="background:var(--delete)"></span>Deleted</span>
-      <span><span class="sw" style="background:var(--keep)"></span>Kept</span>
-    </div>
+        <div class="grid-2" style="margin-bottom:16px">
+          <div class="card">
+            <div class="card-title">Activity, last 24h</div>
+            <svg id="chart" viewBox="0 0 960 110" preserveAspectRatio="none"></svg>
+            <div class="chart-legend">
+              <span><span class="sw" style="background:var(--delete)"></span>Deleted</span>
+              <span><span class="sw" style="background:var(--keep)"></span>Kept</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Verdict breakdown</div>
+            <div class="donut-wrap">
+              <svg id="verdictDonut" viewBox="0 0 148 148"></svg>
+              <div class="donut-center"><div class="num" id="donutTotal">0</div><div class="lbl">total</div></div>
+            </div>
+            <div class="legend-list" id="verdictLegend"></div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Recent activity <a href="#comments" class="view-all" style="float:right; margin-top:-2px">View all &rarr;</a></div>
+            <table class="mini-table">
+              <thead><tr><th>Time</th><th>Platform</th><th>Author</th><th>Comment</th><th>Verdict</th></tr></thead>
+              <tbody id="recentRows"></tbody>
+            </table>
+          </div>
+          <div class="card">
+            <div class="card-title">Platform split</div>
+            <div class="platform-bar-track" id="platformBar"><div class="fb" id="platformBarFb"></div><div class="ig" id="platformBarIg"></div></div>
+            <div class="platform-stats">
+              <div class="platform-stat">
+                <div class="num" id="fbCount">0</div>
+                <div class="lbl"><span class="sw" style="background:var(--fb)"></span>Facebook</div>
+              </div>
+              <div class="platform-stat ig-stat">
+                <div class="num" id="igCount">0</div>
+                <div class="lbl"><span class="sw" style="background:var(--ig)"></span>Instagram<span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-comments" hidden>
+        <div class="page-header">
+          <h1>Comments</h1>
+          <p>Every moderation decision, with filters and manual override</p>
+        </div>
+
+        <div class="toolbar">
+          <select id="platformFilter">
+            <option value="">All platforms</option>
+            <option value="facebook">Facebook</option>
+            <option value="instagram">Instagram</option>
+          </select>
+          <select id="verdictFilter">
+            <option value="">All verdicts</option>
+            <option value="DELETE">Deleted</option>
+            <option value="KEEP">Kept</option>
+            <option value="ERROR">Errors</option>
+          </select>
+          <input type="search" id="search" placeholder="Search comment text or author&hellip;">
+        </div>
+
+        <div class="toolbar">
+          <div class="presets" id="datePresets">
+            <button type="button" data-days="1">Today</button>
+            <button type="button" data-days="7">7 days</button>
+            <button type="button" data-days="30">30 days</button>
+            <button type="button" data-days="0" class="active">All time</button>
+          </div>
+          <input type="date" id="dateFrom">
+          <span class="date-sep">&ndash;</span>
+          <input type="date" id="dateTo">
+          <span class="count-hint" id="countHint"></span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:110px">Time</th>
+                <th style="width:110px">Platform</th>
+                <th style="width:130px">Author</th>
+                <th>Comment</th>
+                <th style="width:60px">Post</th>
+                <th style="width:90px">Verdict</th>
+                <th style="width:110px">Deleted</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="empty" style="display:none">No comments match the current filters.</div>
+      </section>
+
+      <section class="page" id="page-blocklist" hidden>
+        <div class="page-header">
+          <h1>Blocklist</h1>
+          <p>Authors whose comments are removed on sight, no re-check</p>
+        </div>
+
+        <div class="card">
+          <table class="blocklist-table">
+            <thead>
+              <tr><th>Platform</th><th>Author</th><th>Blocked</th><th style="width:80px"></th></tr>
+            </thead>
+            <tbody id="blocklistRows"></tbody>
+          </table>
+          <div class="empty" id="blocklistEmpty" style="display:none; padding: 16px 0;">No blocked authors yet -- they're added automatically the first time one of their comments is deleted.</div>
+        </div>
+      </section>
+    </main>
   </div>
-
-  <div class="toolbar">
-    <select id="platformFilter">
-      <option value="">All platforms</option>
-      <option value="facebook">Facebook</option>
-      <option value="instagram">Instagram</option>
-    </select>
-    <select id="verdictFilter">
-      <option value="">All verdicts</option>
-      <option value="DELETE">Deleted</option>
-      <option value="KEEP">Kept</option>
-      <option value="ERROR">Errors</option>
-    </select>
-    <input type="search" id="search" placeholder="Search comment text or author&hellip;">
-    <button id="refreshBtn" type="button">Refresh</button>
-  </div>
-
-  <div class="toolbar">
-    <div class="presets" id="datePresets">
-      <button type="button" data-days="1">Today</button>
-      <button type="button" data-days="7">7 days</button>
-      <button type="button" data-days="30">30 days</button>
-      <button type="button" data-days="0" class="active">All time</button>
-    </div>
-    <input type="date" id="dateFrom">
-    <span class="date-sep">&ndash;</span>
-    <input type="date" id="dateTo">
-    <span class="count-hint" id="countHint"></span>
-  </div>
-
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th style="width:110px">Time</th>
-          <th style="width:110px">Platform</th>
-          <th style="width:130px">Author</th>
-          <th>Comment</th>
-          <th style="width:60px">Post</th>
-          <th style="width:90px">Verdict</th>
-          <th style="width:110px">Deleted</th>
-        </tr>
-      </thead>
-      <tbody id="rows"></tbody>
-    </table>
-  </div>
-  <div class="empty" id="empty" style="display:none">No comments match the current filters.</div>
 
 <script>
 let allEvents = [];
@@ -390,12 +564,37 @@ function relativeTime(iso) {
   return d + 'd ago';
 }
 
+/* ---------- routing ---------- */
+const PAGES = ['dashboard', 'comments', 'blocklist'];
+function navigate(page) {
+  if (!PAGES.includes(page)) page = 'dashboard';
+  PAGES.forEach((p) => {
+    document.getElementById('page-' + p).hidden = p !== page;
+  });
+  document.querySelectorAll('.nav-link').forEach((a) => {
+    a.classList.toggle('active', a.dataset.page === page);
+  });
+}
+window.addEventListener('hashchange', () => navigate(location.hash.slice(1)));
+document.querySelector('.nav').addEventListener('click', (ev) => {
+  const link = ev.target.closest('.nav-link');
+  if (link) navigate(link.dataset.page);
+});
+
+/* ---------- blocklist ---------- */
 async function loadBlocklist() {
   const res = await fetch('api/blocklist');
   if (!res.ok) return;
   const { blocked } = await res.json();
 
-  document.getElementById('blockedCount').textContent = blocked.length;
+  const navBadge = document.getElementById('navBlockedCount');
+  if (blocked.length > 0) {
+    navBadge.style.display = '';
+    navBadge.textContent = blocked.length;
+  } else {
+    navBadge.style.display = 'none';
+  }
+
   const rowsEl = document.getElementById('blocklistRows');
   const emptyEl = document.getElementById('blocklistEmpty');
 
@@ -440,6 +639,7 @@ function platformBadge(p) {
   return '<span class="muted">&mdash;</span>';
 }
 
+/* ---------- stats + charts ---------- */
 function renderStats(stats) {
   const rate = stats.total ? Math.round((stats.deleted / stats.total) * 100) : 0;
   const cards = [
@@ -470,7 +670,7 @@ function renderChart(events) {
   }
 
   const maxCount = Math.max(1, ...counts.map((c) => c.deleted + c.kept));
-  const width = 960, height = 90, gap = 3;
+  const width = 960, height = 110, gap = 3;
   const barW = (width / buckets) - gap;
   const svg = document.getElementById('chart');
   let out = '';
@@ -494,6 +694,73 @@ function renderChart(events) {
   svg.innerHTML = out;
 }
 
+function renderDonut(stats) {
+  const segments = [
+    { label: 'Deleted', value: stats.deleted, color: 'var(--delete)', hex: '#e5484d' },
+    { label: 'Kept', value: stats.kept, color: 'var(--keep)', hex: '#12b76a' },
+    { label: 'Errors', value: stats.errors, color: 'var(--error)', hex: '#f59e0b' },
+  ];
+  const total = segments.reduce((a, s) => a + s.value, 0);
+  document.getElementById('donutTotal').textContent = total;
+
+  const size = 148, thickness = 20;
+  const r = (size - thickness) / 2;
+  const cx = size / 2, cy = size / 2;
+  const circ = 2 * Math.PI * r;
+  const svg = document.getElementById('verdictDonut');
+
+  if (total === 0) {
+    svg.innerHTML = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="#e5e7eb" stroke-width="' + thickness + '"></circle>';
+  } else {
+    let offset = 0;
+    let out = '';
+    segments.filter((s) => s.value > 0).forEach((seg) => {
+      const frac = seg.value / total;
+      const dash = frac * circ;
+      out += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + seg.hex + '" stroke-width="' + thickness +
+        '" stroke-dasharray="' + dash + ' ' + (circ - dash) + '" stroke-dashoffset="' + (-offset) +
+        '" transform="rotate(-90 ' + cx + ' ' + cy + ')"><title>' + seg.label + ': ' + seg.value + '</title></circle>';
+      offset += dash;
+    });
+    svg.innerHTML = out;
+  }
+
+  document.getElementById('verdictLegend').innerHTML = segments.map((s) =>
+    '<div class="row"><span class="sw" style="background:' + s.hex + '"></span><span class="lbl">' + s.label + '</span><span class="val">' + s.value + '</span></div>'
+  ).join('');
+}
+
+function renderPlatformSplit(stats) {
+  const total = stats.facebook + stats.instagram;
+  const fbPct = total ? (stats.facebook / total) * 100 : 50;
+  const igPct = total ? (stats.instagram / total) * 100 : 50;
+  document.getElementById('platformBarFb').style.width = fbPct + '%';
+  document.getElementById('platformBarIg').style.width = igPct + '%';
+  document.getElementById('fbCount').textContent = stats.facebook;
+  document.getElementById('igCount').textContent = stats.instagram;
+}
+
+function renderRecent(events) {
+  const recent = events.slice(0, 6);
+  const rowsEl = document.getElementById('recentRows');
+  if (recent.length === 0) {
+    rowsEl.innerHTML = '<tr><td colspan="5" class="muted" style="padding:16px 8px">No activity yet.</td></tr>';
+    return;
+  }
+  rowsEl.innerHTML = recent.map((e) => {
+    const badgeClass = e.error ? 'ERROR' : e.verdict;
+    const badgeLabel = e.error ? 'ERROR' : e.verdict;
+    return '<tr>' +
+      '<td class="muted" style="white-space:nowrap">' + relativeTime(e.timestamp) + '</td>' +
+      '<td>' + platformBadge(e.platform) + '</td>' +
+      '<td class="muted" style="white-space:nowrap">' + (e.author ? escapeHtml(e.author) : '&mdash;') + '</td>' +
+      '<td class="text">' + escapeHtml(e.text || '') + '</td>' +
+      '<td><span class="badge ' + badgeClass + '">' + badgeLabel + '</span></td>' +
+      '</tr>';
+  }).join('');
+}
+
+/* ---------- comments table ---------- */
 function deletedCell(e) {
   if (e.deleted) {
     return '<span class="deleted-yes">Yes' + (e.manual ? ' <span class="manual-tag">(manual)</span>' : '') + '</span>';
@@ -557,6 +824,9 @@ async function load() {
   allEvents = events;
   renderStats(stats);
   renderChart(events);
+  renderDonut(stats);
+  renderPlatformSplit(stats);
+  renderRecent(events);
   applyFiltersAndRender();
   await loadBlocklist();
   document.getElementById('updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
@@ -622,6 +892,7 @@ document.getElementById('rows').addEventListener('click', async (ev) => {
   }
 });
 
+navigate(location.hash.slice(1) || 'dashboard');
 load();
 setInterval(load, 15000);
 </script>
