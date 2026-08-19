@@ -368,6 +368,21 @@ const DASHBOARD_HTML = `<!doctype html>
   }
   .unblock-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+  .pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; }
+  .pagination:empty { margin-top: 0; }
+  .page-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .page-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .page-btn:disabled { opacity: 0.4; cursor: default; }
+  .page-info { font-size: 12.5px; color: var(--muted); }
+
   .page[hidden] { display: none; }
 
   @media (max-width: 900px) {
@@ -526,6 +541,7 @@ const DASHBOARD_HTML = `<!doctype html>
           </table>
         </div>
         <div class="empty" id="empty" style="display:none">No comments match the current filters.</div>
+        <div class="pagination" id="commentsPagination"></div>
       </section>
 
       <section class="page" id="page-blocklist" hidden>
@@ -542,6 +558,7 @@ const DASHBOARD_HTML = `<!doctype html>
             <tbody id="blocklistRows"></tbody>
           </table>
           <div class="empty" id="blocklistEmpty" style="display:none; padding: 16px 0;">No blocked authors yet -- they're added automatically the first time one of their comments is deleted.</div>
+          <div class="pagination" id="blocklistPagination"></div>
         </div>
       </section>
     </main>
@@ -566,6 +583,24 @@ function relativeTime(iso) {
   if (h < 24) return h + 'h ago';
   const d = Math.floor(h / 24);
   return d + 'd ago';
+}
+
+/* ---------- pagination ---------- */
+function renderPaginationControls(containerId, page, totalPages, onChange) {
+  const el = document.getElementById(containerId);
+  if (totalPages <= 1) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML =
+    '<button type="button" class="page-btn" data-dir="prev"' + (page <= 1 ? ' disabled' : '') + '>Prev</button>' +
+    '<span class="page-info">Page ' + page + ' of ' + totalPages + '</span>' +
+    '<button type="button" class="page-btn" data-dir="next"' + (page >= totalPages ? ' disabled' : '') + '>Next</button>';
+  el.onclick = (ev) => {
+    const btn = ev.target.closest('.page-btn');
+    if (!btn || btn.disabled) return;
+    onChange(btn.dataset.dir === 'prev' ? page - 1 : page + 1);
+  };
 }
 
 /* ---------- routing ---------- */
