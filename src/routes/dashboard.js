@@ -110,14 +110,8 @@ const DASHBOARD_HTML = `<!doctype html>
     top: 0;
     height: 100vh;
   }
-  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 24px; }
-  .brand-mark {
-    width: 34px; height: 34px; border-radius: 9px;
-    background: linear-gradient(135deg, var(--accent), #8b9cf1);
-    color: #fff; display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 13px; letter-spacing: -0.02em; flex-shrink: 0;
-  }
-  .brand-name { font-weight: 650; font-size: 14px; line-height: 1.3; }
+  .brand { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 4px 8px 24px; }
+  .brand-logo svg { display: block; height: 24px; width: auto; }
   .brand-sub { font-size: 11px; color: var(--muted); }
 
   .nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
