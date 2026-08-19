@@ -19,6 +19,21 @@ function targetFor(platform) {
 }
 
 /**
+ * Facebook comment IDs are structured as "<page_id>_<post_id>_<comment_id>"
+ * (a reply appends further segments), so the post it belongs to can be
+ * derived without an extra API call by joining the first two segments --
+ * Facebook resolves "facebook.com/<page_id>_<post_id>" directly to the
+ * post. Used as a fallback for when the Graph API omits `permalink_url`
+ * from the comment response, which it does silently (no error) rather
+ * than include it, for tokens/comments it won't grant that field to.
+ */
+function fallbackFacebookPostLink(commentId) {
+  const [pageId, postId] = commentId.split('_');
+  if (!pageId || !postId) return null;
+  return `https://www.facebook.com/${pageId}_${postId}`;
+}
+
+/**
  * Fetches a comment's text and a link back to the post/media it's on.
  * The webhook payload for this Graph API version doesn't include the
  * comment text inline, so it has to be looked up separately before it
@@ -42,12 +57,13 @@ async function getCommentDetails(commentId, platform) {
     });
     const { message, text, permalink_url, media } = response.data;
     const commentText = typeof message === 'string' ? message : (typeof text === 'string' ? text : null);
-    const postLink = permalink_url || media?.permalink || null;
+    const postLink = permalink_url || media?.permalink ||
+      (platform === 'facebook' ? fallbackFacebookPostLink(commentId) : null);
     return { text: commentText, postLink };
   } catch (error) {
     const detail = error.response?.data || error.message;
     console.error(`Failed to fetch comment ${commentId}:`, detail);
-    return { text: null, postLink: null };
+    return { text: null, postLink: platform === 'facebook' ? fallbackFacebookPostLink(commentId) : null };
   }
 }
 
