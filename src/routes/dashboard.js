@@ -621,10 +621,15 @@ document.querySelector('.nav').addEventListener('click', (ev) => {
 });
 
 /* ---------- blocklist ---------- */
+const BLOCKLIST_PAGE_SIZE = 12;
+let blockedCache = [];
+let blocklistPage = 1;
+
 async function loadBlocklist() {
   const res = await fetch('api/blocklist');
   if (!res.ok) return;
   const { blocked } = await res.json();
+  blockedCache = blocked;
 
   const navBadge = document.getElementById('navBlockedCount');
   if (blocked.length > 0) {
@@ -634,16 +639,28 @@ async function loadBlocklist() {
     navBadge.style.display = 'none';
   }
 
+  renderBlocklistPage();
+}
+
+function renderBlocklistPage() {
+  const blocked = blockedCache;
   const rowsEl = document.getElementById('blocklistRows');
   const emptyEl = document.getElementById('blocklistEmpty');
 
   if (blocked.length === 0) {
     rowsEl.innerHTML = '';
     emptyEl.style.display = 'block';
+    renderPaginationControls('blocklistPagination', 1, 1, () => {});
     return;
   }
   emptyEl.style.display = 'none';
-  rowsEl.innerHTML = blocked.map((b) => {
+
+  const totalPages = Math.max(1, Math.ceil(blocked.length / BLOCKLIST_PAGE_SIZE));
+  blocklistPage = Math.min(Math.max(blocklistPage, 1), totalPages);
+  const start = (blocklistPage - 1) * BLOCKLIST_PAGE_SIZE;
+  const pageItems = blocked.slice(start, start + BLOCKLIST_PAGE_SIZE);
+
+  rowsEl.innerHTML = pageItems.map((b) => {
     return '<tr>' +
       '<td>' + platformBadge(b.platform) + '</td>' +
       '<td>' + (b.authorName ? escapeHtml(b.authorName) : '<span class="muted">' + escapeHtml(b.authorId) + '</span>') + '</td>' +
@@ -651,6 +668,11 @@ async function loadBlocklist() {
       '<td><button class="unblock-btn" data-platform="' + escapeHtml(b.platform) + '" data-author-id="' + escapeHtml(b.authorId) + '" type="button">Unblock</button></td>' +
       '</tr>';
   }).join('');
+
+  renderPaginationControls('blocklistPagination', blocklistPage, totalPages, (p) => {
+    blocklistPage = p;
+    renderBlocklistPage();
+  });
 }
 
 document.getElementById('blocklistRows').addEventListener('click', async (ev) => {
@@ -807,7 +829,10 @@ function deletedCell(e) {
   return '<button class="delete-btn" data-id="' + encodeURIComponent(e.commentId) + '" type="button">Delete</button>';
 }
 
-function applyFiltersAndRender() {
+const COMMENTS_PAGE_SIZE = 25;
+let commentsPage = 1;
+
+function computeFilteredEvents() {
   const platform = document.getElementById('platformFilter').value;
   const verdict = document.getElementById('verdictFilter').value;
   const search = document.getElementById('search').value.trim().toLowerCase();
@@ -816,7 +841,7 @@ function applyFiltersAndRender() {
   const fromMs = dateFrom ? new Date(dateFrom + 'T00:00:00').getTime() : null;
   const toMs = dateTo ? new Date(dateTo + 'T23:59:59.999').getTime() : null;
 
-  const filtered = allEvents.filter((e) => {
+  return allEvents.filter((e) => {
     if (platform && e.platform !== platform) return false;
     if (verdict === 'ERROR' && !e.error) return false;
     if (verdict === 'DELETE' && e.verdict !== 'DELETE') return false;
@@ -830,30 +855,53 @@ function applyFiltersAndRender() {
     if (toMs !== null && t > toMs) return false;
     return true;
   });
+}
 
-  document.getElementById('countHint').textContent = filtered.length + ' of ' + allEvents.length + ' shown';
+function renderCommentsPage() {
+  const filtered = computeFilteredEvents();
 
   const rowsEl = document.getElementById('rows');
   const emptyEl = document.getElementById('empty');
   if (filtered.length === 0) {
+    document.getElementById('countHint').textContent = '0 of ' + allEvents.length + ' shown';
     rowsEl.innerHTML = '';
     emptyEl.style.display = 'block';
-  } else {
-    emptyEl.style.display = 'none';
-    rowsEl.innerHTML = filtered.map((e) => {
-      const badgeClass = e.error ? 'ERROR' : e.verdict;
-      const badgeLabel = e.error ? 'ERROR' : e.verdict;
-      return '<tr>' +
-        '<td class="time" title="' + new Date(e.timestamp).toLocaleString() + '">' + relativeTime(e.timestamp) + '</td>' +
-        '<td>' + platformBadge(e.platform) + '</td>' +
-        '<td class="author">' + (e.author ? escapeHtml(e.author) : '<span class="muted">&mdash;</span>') + '</td>' +
-        '<td class="text"><div class="full">' + escapeHtml(e.text || '') + '</div>' + (e.error ? '<div class="err">' + escapeHtml(e.error) + '</div>' : '') + '</td>' +
-        '<td class="post">' + (e.postLink ? '<a href="' + escapeHtml(e.postLink) + '" target="_blank" rel="noopener noreferrer">View</a>' : '<span class="muted">&mdash;</span>') + '</td>' +
-        '<td><span class="badge ' + badgeClass + '">' + badgeLabel + '</span>' + (e.autoBlocked ? '<span class="blocked-tag">BLOCKLISTED</span>' : '') + '</td>' +
-        '<td>' + deletedCell(e) + '</td>' +
-        '</tr>';
-    }).join('');
+    renderPaginationControls('commentsPagination', 1, 1, () => {});
+    return;
   }
+  emptyEl.style.display = 'none';
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / COMMENTS_PAGE_SIZE));
+  commentsPage = Math.min(Math.max(commentsPage, 1), totalPages);
+  const start = (commentsPage - 1) * COMMENTS_PAGE_SIZE;
+  const pageItems = filtered.slice(start, start + COMMENTS_PAGE_SIZE);
+
+  document.getElementById('countHint').textContent =
+    (start + 1) + '–' + Math.min(start + COMMENTS_PAGE_SIZE, filtered.length) + ' of ' + filtered.length + ' shown';
+
+  rowsEl.innerHTML = pageItems.map((e) => {
+    const badgeClass = e.error ? 'ERROR' : e.verdict;
+    const badgeLabel = e.error ? 'ERROR' : e.verdict;
+    return '<tr>' +
+      '<td class="time" title="' + new Date(e.timestamp).toLocaleString() + '">' + relativeTime(e.timestamp) + '</td>' +
+      '<td>' + platformBadge(e.platform) + '</td>' +
+      '<td class="author">' + (e.author ? escapeHtml(e.author) : '<span class="muted">&mdash;</span>') + '</td>' +
+      '<td class="text"><div class="full">' + escapeHtml(e.text || '') + '</div>' + (e.error ? '<div class="err">' + escapeHtml(e.error) + '</div>' : '') + '</td>' +
+      '<td class="post">' + (e.postLink ? '<a href="' + escapeHtml(e.postLink) + '" target="_blank" rel="noopener noreferrer">View</a>' : '<span class="muted">&mdash;</span>') + '</td>' +
+      '<td><span class="badge ' + badgeClass + '">' + badgeLabel + '</span>' + (e.autoBlocked ? '<span class="blocked-tag">BLOCKLISTED</span>' : '') + '</td>' +
+      '<td>' + deletedCell(e) + '</td>' +
+      '</tr>';
+  }).join('');
+
+  renderPaginationControls('commentsPagination', commentsPage, totalPages, (p) => {
+    commentsPage = p;
+    renderCommentsPage();
+  });
+}
+
+function applyFiltersAndRender() {
+  commentsPage = 1;
+  renderCommentsPage();
 }
 
 async function load() {
@@ -866,7 +914,7 @@ async function load() {
   renderDonut(stats);
   renderPlatformSplit(stats);
   renderRecent(events);
-  applyFiltersAndRender();
+  renderCommentsPage();
   await loadBlocklist();
   document.getElementById('updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
