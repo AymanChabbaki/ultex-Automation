@@ -19,18 +19,38 @@ function targetFor(platform) {
 }
 
 /**
- * Facebook comment IDs are structured as "<page_id>_<post_id>_<comment_id>"
- * (a reply appends further segments), so the post it belongs to can be
- * derived without an extra API call by joining the first two segments --
- * Facebook resolves "facebook.com/<page_id>_<post_id>" directly to the
- * post. Used as a fallback for when the Graph API omits `permalink_url`
- * from the comment response, which it does silently (no error) rather
- * than include it, for tokens/comments it won't grant that field to.
+ * Facebook comment IDs are usually structured as
+ * "<page_id>_<post_id>_<comment_id>", so the post's own ID can normally
+ * be derived by joining the first two segments without an extra API
+ * call. Only used as a last resort when the webhook didn't hand us the
+ * real post_id -- unlike that value, this is a guess based on an ID
+ * shape Meta doesn't document as stable, so it can point at the wrong
+ * (or a non-existent) object for some comment/post types.
  */
-function fallbackFacebookPostLink(commentId) {
+function guessFacebookPostId(commentId) {
   const [pageId, postId] = commentId.split('_');
-  if (!pageId || !postId) return null;
-  return `https://www.facebook.com/${pageId}_${postId}`;
+  return pageId && postId ? `${pageId}_${postId}` : null;
+}
+
+/**
+ * Looks up a Facebook post's own canonical permalink_url. This is the
+ * reliable source for a Facebook post link -- the equivalent field on
+ * the *comment* object (requested in getCommentDetails below) comes
+ * back empty for some tokens/comments without erroring, and guessing
+ * the URL shape from the post ID directly (facebook.com/<post_id>)
+ * doesn't resolve for every post type (e.g. some photo/video posts).
+ */
+async function getPostPermalink(postId, base, token) {
+  try {
+    const response = await axios.get(`${base}/${postId}`, {
+      params: { fields: 'permalink_url', access_token: token },
+    });
+    return response.data.permalink_url || null;
+  } catch (error) {
+    const detail = error.response?.data || error.message;
+    console.error(`Failed to fetch post ${postId} permalink:`, detail);
+    return null;
+  }
 }
 
 /**
@@ -40,31 +60,42 @@ function fallbackFacebookPostLink(commentId) {
  * can be sent to the moderation model. Requests both `message`
  * (Facebook Page comments) and `text` (Instagram comments) since the
  * two platforms name the field differently on the same underlying
- * comment-object endpoint. `permalink_url` covers Facebook; Instagram
- * has no such field on the comment itself, so its post link comes from
- * the parent media object's `permalink` instead.
+ * comment-object endpoint. Instagram's post link comes from the parent
+ * media object's `permalink`. Facebook's comment-level `permalink_url`
+ * is requested too but isn't reliably populated, so it falls back to
+ * looking up the parent post's own permalink_url via `postId` (passed
+ * in from the webhook payload where available).
  * Returns { text: null, postLink: null } if the comment is unavailable
  * (e.g. already deleted by the author before this call runs).
  */
-async function getCommentDetails(commentId, platform) {
+async function getCommentDetails(commentId, platform, postId) {
   const { base, token } = targetFor(platform);
   const url = `${base}/${commentId}`;
   const fields = platform === 'instagram' ? 'text,media{permalink}' : 'message,text,permalink_url';
+
+  let commentText = null;
+  let postLink = null;
 
   try {
     const response = await axios.get(url, {
       params: { fields, access_token: token },
     });
     const { message, text, permalink_url, media } = response.data;
-    const commentText = typeof message === 'string' ? message : (typeof text === 'string' ? text : null);
-    const postLink = permalink_url || media?.permalink ||
-      (platform === 'facebook' ? fallbackFacebookPostLink(commentId) : null);
-    return { text: commentText, postLink };
+    commentText = typeof message === 'string' ? message : (typeof text === 'string' ? text : null);
+    postLink = permalink_url || media?.permalink || null;
   } catch (error) {
     const detail = error.response?.data || error.message;
     console.error(`Failed to fetch comment ${commentId}:`, detail);
-    return { text: null, postLink: platform === 'facebook' ? fallbackFacebookPostLink(commentId) : null };
   }
+
+  if (!postLink && platform === 'facebook') {
+    const resolvedPostId = postId || guessFacebookPostId(commentId);
+    if (resolvedPostId) {
+      postLink = await getPostPermalink(resolvedPostId, base, token);
+    }
+  }
+
+  return { text: commentText, postLink };
 }
 
 /**

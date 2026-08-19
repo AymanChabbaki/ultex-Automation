@@ -62,6 +62,10 @@ function extractComment(change) {
       authorName: value.from?.name,
       inlineText: value.message,
       platform: 'facebook',
+      // Meta includes the parent post's ID directly on comment-add feed
+      // events -- used to look up the post's real permalink_url, since
+      // the comment's own permalink_url field isn't reliably returned.
+      postId: value.post_id,
     };
   }
 
@@ -87,7 +91,7 @@ async function processEntries(entries) {
       const comment = extractComment(change);
       if (!comment) continue;
 
-      const { commentId, authorId, authorName, inlineText, platform } = comment;
+      const { commentId, authorId, authorName, inlineText, platform, postId } = comment;
       if (!commentId) continue;
 
       // Skip the Page/IG account's own comments/replies so the bot
@@ -102,7 +106,7 @@ async function processEntries(entries) {
       // text inline on current Graph API versions, so fetch it if missing.
       // Always fetched (regardless of inlineText) since this is also
       // where the post/media permalink comes from.
-      const details = await getCommentDetails(commentId, platform);
+      const details = await getCommentDetails(commentId, platform, postId);
       const text = typeof inlineText === 'string' ? inlineText : details.text;
       const postLink = details.postLink;
       if (typeof text !== 'string') continue;
