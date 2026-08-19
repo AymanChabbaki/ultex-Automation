@@ -217,6 +217,8 @@ const DASHBOARD_HTML = `<!doctype html>
   td.text { max-width: 420px; }
   td.text .full { white-space: pre-wrap; word-break: break-word; }
   td.text .err { color: var(--error); font-size: 12px; margin-top: 4px; }
+  td.post a { color: var(--accent); text-decoration: none; font-size: 12px; white-space: nowrap; }
+  td.post a:hover { text-decoration: underline; }
 
   .platform-badge {
     display: inline-flex;
@@ -357,6 +359,7 @@ const DASHBOARD_HTML = `<!doctype html>
           <th style="width:110px">Platform</th>
           <th style="width:130px">Author</th>
           <th>Comment</th>
+          <th style="width:60px">Post</th>
           <th style="width:90px">Verdict</th>
           <th style="width:110px">Deleted</th>
         </tr>
@@ -539,6 +542,7 @@ function applyFiltersAndRender() {
         '<td>' + platformBadge(e.platform) + '</td>' +
         '<td class="author">' + (e.author ? escapeHtml(e.author) : '<span class="muted">&mdash;</span>') + '</td>' +
         '<td class="text"><div class="full">' + escapeHtml(e.text || '') + '</div>' + (e.error ? '<div class="err">' + escapeHtml(e.error) + '</div>' : '') + '</td>' +
+        '<td class="post">' + (e.postLink ? '<a href="' + escapeHtml(e.postLink) + '" target="_blank" rel="noopener noreferrer">View</a>' : '<span class="muted">&mdash;</span>') + '</td>' +
         '<td><span class="badge ' + badgeClass + '">' + badgeLabel + '</span>' + (e.autoBlocked ? '<span class="blocked-tag">BLOCKLISTED</span>' : '') + '</td>' +
         '<td>' + deletedCell(e) + '</td>' +
         '</tr>';

@@ -19,31 +19,35 @@ function targetFor(platform) {
 }
 
 /**
- * Fetches a comment's text. The webhook payload for this Graph API
- * version doesn't include the comment text inline, so it has to be
- * looked up separately before it can be sent to the moderation model.
- * Requests both `message` (Facebook Page comments) and `text`
- * (Instagram comments) since the two platforms name the field
- * differently on the same underlying comment-object endpoint.
- * Returns null if the comment is unavailable (e.g. already deleted by
- * the author before this call runs).
+ * Fetches a comment's text and a link back to the post/media it's on.
+ * The webhook payload for this Graph API version doesn't include the
+ * comment text inline, so it has to be looked up separately before it
+ * can be sent to the moderation model. Requests both `message`
+ * (Facebook Page comments) and `text` (Instagram comments) since the
+ * two platforms name the field differently on the same underlying
+ * comment-object endpoint. `permalink_url` covers Facebook; Instagram
+ * has no such field on the comment itself, so its post link comes from
+ * the parent media object's `permalink` instead.
+ * Returns { text: null, postLink: null } if the comment is unavailable
+ * (e.g. already deleted by the author before this call runs).
  */
-async function getCommentText(commentId, platform) {
+async function getCommentDetails(commentId, platform) {
   const { base, token } = targetFor(platform);
   const url = `${base}/${commentId}`;
+  const fields = platform === 'instagram' ? 'text,media{permalink}' : 'message,text,permalink_url';
 
   try {
     const response = await axios.get(url, {
-      params: { fields: 'message,text', access_token: token },
+      params: { fields, access_token: token },
     });
-    const { message, text } = response.data;
-    if (typeof message === 'string') return message;
-    if (typeof text === 'string') return text;
-    return null;
+    const { message, text, permalink_url, media } = response.data;
+    const commentText = typeof message === 'string' ? message : (typeof text === 'string' ? text : null);
+    const postLink = permalink_url || media?.permalink || null;
+    return { text: commentText, postLink };
   } catch (error) {
     const detail = error.response?.data || error.message;
     console.error(`Failed to fetch comment ${commentId}:`, detail);
-    return null;
+    return { text: null, postLink: null };
   }
 }
 
@@ -70,4 +74,4 @@ async function deleteComment(commentId, platform) {
   }
 }
 
-module.exports = { getCommentText, deleteComment };
+module.exports = { getCommentDetails, deleteComment };

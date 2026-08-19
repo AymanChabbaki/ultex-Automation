@@ -1,7 +1,7 @@
 const express = require('express');
 const { verifySignature } = require('../middleware/verifySignature');
 const { shouldDelete } = require('../services/moderation');
-const { getCommentText, deleteComment } = require('../services/facebook');
+const { getCommentDetails, deleteComment } = require('../services/facebook');
 const eventLog = require('../services/eventLog');
 const blocklist = require('../services/blocklist');
 
@@ -100,7 +100,11 @@ async function processEntries(entries) {
 
       // Neither platform's webhook payload reliably includes the comment
       // text inline on current Graph API versions, so fetch it if missing.
-      const text = typeof inlineText === 'string' ? inlineText : await getCommentText(commentId, platform);
+      // Always fetched (regardless of inlineText) since this is also
+      // where the post/media permalink comes from.
+      const details = await getCommentDetails(commentId, platform);
+      const text = typeof inlineText === 'string' ? inlineText : details.text;
+      const postLink = details.postLink;
       if (typeof text !== 'string') continue;
 
       // A previously-deleted author's comments get removed on sight,
@@ -114,7 +118,7 @@ async function processEntries(entries) {
         console.log(`Comment ${commentId}: ${verdict}${isRepeatOffender ? ' (blocklisted author, skipped AI check)' : ''}`);
         eventLog.record({
           commentId, text, verdict, deleted: deleteResult.ok, platform,
-          author: authorName, authorId, autoBlocked: isRepeatOffender,
+          author: authorName, authorId, autoBlocked: isRepeatOffender, postLink,
         });
 
         if (verdict === 'DELETE' && !isRepeatOffender) {
@@ -122,7 +126,7 @@ async function processEntries(entries) {
         }
       } catch (err) {
         console.error(`Error moderating comment ${commentId}:`, err.message);
-        eventLog.record({ commentId, text, verdict: null, deleted: false, error: err.message, platform, author: authorName, authorId });
+        eventLog.record({ commentId, text, verdict: null, deleted: false, error: err.message, platform, author: authorName, authorId, postLink });
       }
     }
   }
